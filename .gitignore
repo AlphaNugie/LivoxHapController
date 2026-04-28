@@ -63,3 +63,4 @@ nunit-*.xml
 /packages/Newtonsoft.Json.13.0.3
 /CrcTest.cs
 /crc_test.csx
+/LivoxHapController/.vs
