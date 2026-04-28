@@ -23,8 +23,11 @@ namespace LivoxHapController.Services
         private bool _isListening;
 
 #if NET45_OR_GREATER
-        /// <summary>命令端口的UDP客户端</summary>
-        private UdpClient _commandClient;
+        /// <summary>
+        /// 命令端口的UDP客户端
+        /// internal访问级别，供LidarCommander复用以发送命令，确保命令和ACK共用同一端口
+        /// </summary>
+        internal UdpClient CommandClient;
 
         /// <summary>点云端口的UDP客户端</summary>
         private UdpClient _pointCloudClient;
@@ -37,9 +40,18 @@ namespace LivoxHapController.Services
 
         /// <summary>点云端口监听线程</summary>
         private Thread _listenerThreadCldPnt;
+
+        /// <summary>
+        /// 命令客户端的线程同步锁
+        /// 保护CommandClient的Send/Receive操作，防止发送线程和接收线程并发访问导致异常
+        /// </summary>
+        private readonly object _commandLock = new object();
 #elif NET9_0_OR_GREATER
-        /// <summary>命令端口的UDP客户端</summary>
-        private UdpClient? _commandClient;
+        /// <summary>
+        /// 命令端口的UDP客户端
+        /// internal访问级别，供LidarCommander复用以发送命令，确保命令和ACK共用同一端口
+        /// </summary>
+        internal UdpClient? CommandClient;
 
         /// <summary>点云端口的UDP客户端</summary>
         private UdpClient? _pointCloudClient;
@@ -52,6 +64,12 @@ namespace LivoxHapController.Services
 
         /// <summary>点云端口监听线程</summary>
         private Thread? _listenerThreadCldPnt;
+
+        /// <summary>
+        /// 命令客户端的线程同步锁
+        /// 保护CommandClient的Send/Receive操作，防止发送线程和接收线程并发访问导致异常
+        /// </summary>
+        private readonly Lock _commandLock = new();
 #endif
 
         #endregion
@@ -149,7 +167,8 @@ namespace LivoxHapController.Services
         public void StartListening(string hostIp = "", int commandPort = 56000, int pointCloudPort = 57000, int imuPort = 58000)
         {
             // 绑定命令端口（用于接收ACK响应和设备推送消息）
-            _commandClient = string.IsNullOrWhiteSpace(hostIp)
+            // 同时也作为发送命令的端口，确保雷达的"跟随策略"将ACK回复到同一端口
+            CommandClient = string.IsNullOrWhiteSpace(hostIp)
                 ? new UdpClient(commandPort)
                 : new UdpClient(new IPEndPoint(IPAddress.Parse(hostIp), commandPort));
 
@@ -195,14 +214,19 @@ namespace LivoxHapController.Services
             while (_isListening)
             {
                 // 处理命令端口数据
-                if (_commandClient != null && _commandClient.Available > 0)
+                // 使用lock保护Receive操作，与SendCommand中的Send操作互斥，确保线程安全
+                if (CommandClient != null && CommandClient.Available > 0)
                 {
 #if NET45_OR_GREATER
                     IPEndPoint remoteEP = null;
 #elif NET9_0_OR_GREATER
                     IPEndPoint? remoteEP = null;
 #endif
-                    byte[] data = _commandClient.Receive(ref remoteEP);
+                    byte[] data;
+                    lock (_commandLock)
+                    {
+                        data = CommandClient.Receive(ref remoteEP);
+                    }
 
                     // 区分ACK响应和设备推送消息
                     if (data != null && data.Length >= SdkPacketBuilder.HeaderSize)
@@ -275,6 +299,26 @@ namespace LivoxHapController.Services
         #region 发送方法
 
         /// <summary>
+        /// 通过命令端口发送UDP数据
+        /// 复用已绑定的CommandClient发送，确保命令发送端口与ACK监听端口一致
+        /// 根据Livox协议"跟随策略"，雷达会将ACK回复到命令的源端口，
+        /// 因此必须使用同一个UdpClient发送命令和接收ACK
+        /// </summary>
+        /// <param name="data">要发送的数据字节数组</param>
+        /// <param name="target">目标端点（雷达IP和命令端口）</param>
+        /// <exception cref="InvalidOperationException">CommandClient未初始化</exception>
+        public void SendCommand(byte[] data, IPEndPoint target)
+        {
+            if (CommandClient == null)
+                throw new InvalidOperationException("命令端口未初始化，请先调用StartListening()");
+
+            lock (_commandLock)
+            {
+                CommandClient.Send(data, data.Length, target);
+            }
+        }
+
+        /// <summary>
         /// 静态发送UDP数据方法
         /// 提供简单的UDP数据发送功能，不需要UdpCommunicator实例
         /// </summary>
@@ -313,7 +357,7 @@ namespace LivoxHapController.Services
             _listenerThreadCldPnt?.Join(500);
             _listenerThread?.Join(500);
 
-            _commandClient?.Close();
+            CommandClient?.Close();
             _pointCloudClient?.Close();
             _imuClient?.Close();
 

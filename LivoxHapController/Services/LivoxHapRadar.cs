@@ -332,8 +332,12 @@ namespace LivoxHapController.Services
             if (deviceInfo == null)
                 throw new ArgumentNullException(nameof(deviceInfo), "设备信息不能为空");
 
+            if (_udpComm == null)
+                throw new NullReferenceException("UdpCommunicator对象不能为空（_udpComm）");
+
             // 创建命令控制器
-            _commander = new LidarCommander(deviceInfo.LidarIpString, deviceInfo.CommandPort);
+            // 传入UdpCommunicator，使命令通过其命令端口发送，确保ACK能被正确接收
+            _commander = new LidarCommander(deviceInfo.LidarIpString, deviceInfo.CommandPort, _udpComm);
             _connectedDevice = deviceInfo;
             _connectedDevice.IsConnected = true;
         }

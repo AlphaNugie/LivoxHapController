@@ -12,9 +12,13 @@ namespace LivoxHapController.Services
     /// 对应C++ command_impl.cpp 中的所有 CommandImpl::Set/Query 方法
     /// 
     /// 使用方式：
-    /// 1. 创建实例后设置目标雷达的IP和命令端口
+    /// 1. 创建实例时传入UdpCommunicator，复用其命令端口发送命令
     /// 2. 调用各种 Set/Query/Enable/Disable 方法发送命令
     /// 3. 通过 UdpCommunicator 接收并处理ACK响应
+    /// 
+    /// 重要：必须通过UdpCommunicator的命令端口发送命令，因为Livox协议的"跟随策略"
+    /// 会让雷达将ACK回复到命令的源端口。如果使用独立UdpClient发送，
+    /// ACK会回到该独立客户端的随机源端口，而UdpCommunicator绑定在固定端口上监听，导致收不到ACK。
     /// </summary>
     /// <remarks>
     /// 构造LiDAR命令控制器
@@ -29,8 +33,11 @@ namespace LivoxHapController.Services
         /// <summary>目标雷达的命令端口</summary>
         private readonly int _commandPort;
 
-        /// <summary>用于发送命令的UDP客户端</summary>
-        private readonly UdpClient _sendClient;
+        /// <summary>
+        /// UDP通信处理器引用
+        /// 复用其命令端口发送命令，确保命令和ACK共用同一端口
+        /// </summary>
+        private readonly UdpCommunicator _udpComm;
 
         /// <summary>最大重试次数</summary>
         private readonly int _maxRetries;
@@ -46,18 +53,23 @@ namespace LivoxHapController.Services
     /// 对应C++ command_impl.cpp 中的所有 CommandImpl::Set/Query 方法
     /// 
     /// 使用方式：
-    /// 1. 创建实例后设置目标雷达的IP和命令端口
+    /// 1. 创建实例时传入UdpCommunicator，复用其命令端口发送命令
     /// 2. 调用各种 Set/Query/Enable/Disable 方法发送命令
     /// 3. 通过 UdpCommunicator 接收并处理ACK响应
+    /// 
+    /// 重要：必须通过UdpCommunicator的命令端口发送命令，因为Livox协议的"跟随策略"
+    /// 会让雷达将ACK回复到命令的源端口。如果使用独立UdpClient发送，
+    /// ACK会回到该独立客户端的随机源端口，而UdpCommunicator绑定在固定端口上监听，导致收不到ACK。
     /// </summary>
     /// <remarks>
     /// 构造LiDAR命令控制器
     /// </remarks>
     /// <param name="lidarIp">目标雷达的IP地址</param>
     /// <param name="commandPort">目标雷达的命令端口</param>
+    /// <param name="udpComm">UDP通信处理器，复用其命令端口发送命令</param>
     /// <param name="maxRetries">发送失败时的最大重试次数（默认1）</param>
     /// <param name="retryInterval">重试间隔毫秒数（默认500）</param>
-    public class LidarCommander(string lidarIp, int commandPort, int maxRetries = 1, int retryInterval = 500) : IDisposable
+    public class LidarCommander(string lidarIp, int commandPort, UdpCommunicator udpComm, int maxRetries = 1, int retryInterval = 500) : IDisposable
     {
         #region 私有字段
 
@@ -67,8 +79,11 @@ namespace LivoxHapController.Services
         /// <summary>目标雷达的命令端口</summary>
         private readonly int _commandPort = commandPort;
 
-        /// <summary>用于发送命令的UDP客户端</summary>
-        private readonly UdpClient _sendClient = new();
+        /// <summary>
+        /// UDP通信处理器引用
+        /// 复用其命令端口发送命令，确保命令和ACK共用同一端口
+        /// </summary>
+        private readonly UdpCommunicator _udpComm = udpComm;
 
         /// <summary>最大重试次数</summary>
         private readonly int _maxRetries = maxRetries;
@@ -86,24 +101,28 @@ namespace LivoxHapController.Services
         /// </summary>
         /// <param name="lidarIp">目标雷达的IP地址</param>
         /// <param name="commandPort">目标雷达的命令端口</param>
+        /// <param name="udpComm">UDP通信处理器，复用其命令端口发送命令</param>
         /// <param name="maxRetries">发送失败时的最大重试次数（默认1）</param>
         /// <param name="retryInterval">重试间隔毫秒数（默认500）</param>
-        public LidarCommander(string lidarIp, int commandPort, int maxRetries = 1, int retryInterval = 500)
+        public LidarCommander(string lidarIp, int commandPort, UdpCommunicator udpComm, int maxRetries = 1, int retryInterval = 500)
         {
             _lidarIp = lidarIp;
             _commandPort = commandPort;
+            _udpComm = udpComm;
             _maxRetries = maxRetries;
             _retryInterval = retryInterval;
-            _sendClient = new UdpClient();
         }
 #endif
 
         /// <summary>
         /// 释放资源
+        /// LidarCommander不再拥有UdpClient，无需关闭网络资源
+        /// UdpCommunicator的生命周期由LivoxHapRadar管理
         /// </summary>
         public void Dispose()
         {
-            _sendClient?.Close();
+            // LidarCommander不再拥有独立的UdpClient，无需关闭网络资源
+            // UdpCommunicator的生命周期由LivoxHapRadar管理，不应在此处释放
             GC.SuppressFinalize(this);
         }
 
@@ -136,6 +155,7 @@ namespace LivoxHapController.Services
 
         /// <summary>
         /// 发送带重试的UDP数据包
+        /// 通过UdpCommunicator.SendCommand()发送，确保使用命令端口发送
         /// </summary>
         /// <param name="packet">完整的数据包</param>
         /// <returns>实际发送的字节数</returns>
@@ -146,14 +166,14 @@ namespace LivoxHapController.Services
 #elif NET9_0_OR_GREATER
             IPEndPoint target = new(IPAddress.Parse(_lidarIp), _commandPort);
 #endif
-            int bytesSent = 0;
 
             for (int attempt = 0; attempt <= _maxRetries; attempt++)
             {
                 try
                 {
-                    bytesSent = _sendClient.Send(packet, packet.Length, target);
-                    return bytesSent;
+                    // 通过UdpCommunicator的命令端口发送，确保雷达ACK回到同一端口
+                    _udpComm.SendCommand(packet, target);
+                    return packet.Length;
                 }
                 catch (Exception)
                 {
@@ -164,7 +184,7 @@ namespace LivoxHapController.Services
                 }
             }
 
-            return bytesSent;
+            return 0;
         }
 
         #endregion
