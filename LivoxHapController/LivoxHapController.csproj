@@ -98,10 +98,10 @@
     <None Include="packages.config" />
     <None Include="Readme.md" />
   </ItemGroup>
+  <ItemGroup />
   <ItemGroup>
-    <Folder Include="bin\Debug\" />
-  </ItemGroup>
-  <ItemGroup>
+    <Content Include="bin\Debug\CommonLib.dll" />
+    <Content Include="bin\Debug\CommonLib.xml" />
     <Content Include="ConfigFiles\readme.txt" />
     <Content Include="Reference\include\livox_lidar_api.h" />
     <Content Include="Reference\include\livox_lidar_cfg.h" />
