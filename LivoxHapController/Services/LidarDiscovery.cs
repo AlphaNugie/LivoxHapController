@@ -12,9 +12,12 @@ namespace LivoxHapController.Services
     /// 对应C++ DeviceManager::Detection() + DetectionLidars()
     /// 
     /// 工作原理：
-    /// 1. 每秒向 255.255.255.255:56000 发送空的搜索命令包
-    /// 2. 监听 56001 端口接收设备的广播响应
-    /// 3. 解析响应获取设备SN、IP、端口等信息
+    /// 1. 绑定本地56001端口（DetectionListenPort），既用于发送广播，也用于接收响应
+    /// 2. 每秒向 255.255.255.255:56000 发送空的搜索命令包
+    /// 3. 扫描仪收到广播后，会将响应包发回发送方的源端口（即56001）
+    /// 4. 在同一客户端上接收并解析响应，获取设备SN、IP、端口等信息
+    /// 
+    /// 注意：发送与接收必须使用同一个UdpClient，因为扫描仪会向广播包的源端口回复
     /// </summary>
     public class LidarDiscovery : IDisposable
     {
@@ -23,37 +26,27 @@ namespace LivoxHapController.Services
         /// <summary>是否正在运行</summary>
         private bool _isRunning;
 
-        /// <summary>发现线程</summary>
-        private Thread
-            //.net 9框架下使返回对象可为空
-#if NET9_0_OR_GREATER
-            ?
-#endif
-      _discoveryThread;
-
-        /// <summary>广播搜索用的UDP客户端</summary>
+        /// <summary>
+        /// 统一的UDP客户端，同时用于发送广播和接收响应
+        /// 绑定56001端口，发送广播时源端口为56001，扫描仪回复也发往56001
+        /// </summary>
         private UdpClient
             //.net 9框架下使返回对象可为空
 #if NET9_0_OR_GREATER
             ?
 #endif
-      _broadcastClient;
+        _udpClient;
 
-        /// <summary>监听响应的UDP客户端</summary>
-        private UdpClient
-            //.net 9框架下使返回对象可为空
-#if NET9_0_OR_GREATER
-            ?
-#endif
-      _listenClient;
-
-        /// <summary>监听线程</summary>
+        /// <summary>
+        /// 统一工作线程，在同一循环中交替执行发送广播和接收响应
+        /// 合并后不再需要独立的广播线程和监听线程
+        /// </summary>
         private Thread
             //.net 9框架下使返回对象可为空
 #if NET9_0_OR_GREATER
             ?
 #endif
-      _listenThread;
+        _workerThread;
 
         #endregion
 
@@ -68,7 +61,7 @@ namespace LivoxHapController.Services
 #if NET9_0_OR_GREATER
             ?
 #endif
-      DeviceDiscovered;
+        DeviceDiscovered;
 
         #endregion
 
@@ -104,7 +97,7 @@ namespace LivoxHapController.Services
 
         /// <summary>
         /// 启动设备发现
-        /// 开始每秒广播搜索，并监听设备响应
+        /// 绑定56001端口，开始广播搜索并接收设备响应
         /// </summary>
         /// <param name="hostIp">本机IP地址（用于绑定监听端口），为空则绑定所有接口</param>
         public void Start(string hostIp = "")
@@ -113,44 +106,28 @@ namespace LivoxHapController.Services
 
             _isRunning = true;
 
-            // 创建广播发送客户端
-//#if NET45_OR_GREATER
-//            _broadcastClient = new UdpClient();
-//#elif NET9_0_OR_GREATER
-//            _broadcastClient = new();
-//#endif
+            // 创建统一的UDP客户端，绑定56001端口
+            // 该客户端既用于发送广播（源端口56001），也用于接收扫描仪的回复（目标端口56001）
             if (string.IsNullOrWhiteSpace(hostIp))
-                _broadcastClient = new UdpClient(SdkPacketBuilder.DetectionListenPort + 1);
+                _udpClient = new UdpClient(SdkPacketBuilder.DetectionListenPort);
             else
-                _broadcastClient = new UdpClient(
-                    new IPEndPoint(IPAddress.Parse(hostIp), SdkPacketBuilder.DetectionListenPort + 1));
-
-            _broadcastClient.EnableBroadcast = true;
-            // 设置发送超时，防止Send阻塞
-            _broadcastClient.Client.SendTimeout = 1000;
-
-            // 创建响应监听客户端（绑定56001端口）
-            if (string.IsNullOrWhiteSpace(hostIp))
-                _listenClient = new UdpClient(SdkPacketBuilder.DetectionListenPort);
-            else
-                _listenClient = new UdpClient(
+                _udpClient = new UdpClient(
                     new IPEndPoint(IPAddress.Parse(hostIp), SdkPacketBuilder.DetectionListenPort));
 
-            // 启动监听线程
-            _listenThread = new Thread(ListenWorker)
-            {
-                IsBackground = true,
-                Name = "LidarDiscovery-Listen"
-            };
-            _listenThread.Start();
+            // 启用广播发送
+            _udpClient.EnableBroadcast = true;
+            // 设置发送超时，防止Send阻塞
+            _udpClient.Client.SendTimeout = 1000;
+            // 设置接收超时，以便在等待响应时能定期检查_isRunning标志
+            _udpClient.Client.ReceiveTimeout = 1000;
 
-            // 启动广播线程
-            _discoveryThread = new Thread(DiscoveryWorker)
+            // 启动统一工作线程（发送+接收在同一循环中）
+            _workerThread = new Thread(DiscoveryWorker)
             {
                 IsBackground = true,
-                Name = "LidarDiscovery-Broadcast"
+                Name = "LidarDiscovery-Worker"
             };
-            _discoveryThread.Start();
+            _workerThread.Start();
         }
 
         /// <summary>
@@ -160,16 +137,11 @@ namespace LivoxHapController.Services
         {
             _isRunning = false;
 
-            _discoveryThread?.Join(2000);
-            _listenThread?.Join(2000);
+            _workerThread?.Join(2000);
 
-            _broadcastClient?.Close();
-            _listenClient?.Close();
-
-            _broadcastClient = null;
-            _listenClient = null;
-            _discoveryThread = null;
-            _listenThread = null;
+            _udpClient?.Close();
+            _udpClient = null;
+            _workerThread = null;
         }
 
         #endregion
@@ -177,14 +149,15 @@ namespace LivoxHapController.Services
         #region 私有工作线程
 
         /// <summary>
-        /// 广播搜索工作线程
-        /// 每秒向 255.255.255.255:56000 发送搜索命令包
-        /// 对应C++ DeviceManager::DetectionLidars() 中的 while(!is_stop_detection_) { Detection(); sleep(1s); }
+        /// 统一工作线程
+        /// 在同一循环中交替执行：发送广播 → 接收响应，与C++ DeviceManager::DetectionLidars()逻辑一致
+        /// 对应C++中的 while(!is_stop_detection_) { Detection(); 接收响应; sleep(1s); }
         /// </summary>
         private void DiscoveryWorker()
         {
             while (_isRunning)
             {
+                // 1. 发送广播搜索包
                 try
                 {
                     SendDiscoveryBroadcast();
@@ -194,31 +167,31 @@ namespace LivoxHapController.Services
                     // 发送失败时忽略，下一秒重试
                 }
 
-                // 每秒发送一次（与C++一致）
+                // 2. 尝试接收响应（非阻塞方式，超时后继续下一轮循环）
+                ReceiveResponses();
+
+                // 3. 每秒循环一次（与C++一致）
                 Thread.Sleep(1000);
             }
         }
 
         /// <summary>
-        /// 响应监听工作线程
-        /// 持续监听56001端口，解析收到的广播响应
+        /// 接收所有待处理的广播响应
+        /// 在发送广播后调用，持续接收直到无更多数据或超时
         /// </summary>
-        private void ListenWorker()
+        private void ReceiveResponses()
         {
-            if (_listenClient == null) return;
-            _listenClient.Client.ReceiveTimeout = 1000; // 1秒超时，以便检查_isRunning
-
             while (_isRunning)
             {
                 try
                 {
                     IPEndPoint
-            //.net 9框架下使返回对象可为空
+                        //.net 9框架下使返回对象可为空
 #if NET9_0_OR_GREATER
-            ?
+                        ?
 #endif
-      remoteEP = null;
-                    byte[] responseData = _listenClient.Receive(ref remoteEP);
+                    remoteEP = null;
+                    byte[] responseData = _udpClient.Receive(ref remoteEP);
 
                     if (responseData != null && responseData.Length >= 24)
                     {
@@ -248,11 +221,13 @@ namespace LivoxHapController.Services
                 }
                 catch (SocketException)
                 {
-                    // ReceiveTimeout到期是正常的，继续循环
+                    // ReceiveTimeout到期是正常的，跳出内层循环回到外层
+                    break;
                 }
                 catch (Exception)
                 {
-                    // 其他异常忽略
+                    // 其他异常忽略，继续尝试接收
+                    break;
                 }
             }
         }
@@ -273,12 +248,13 @@ namespace LivoxHapController.Services
             byte[] packet = SdkPacketBuilder.BuildEmptyCommand(CommandType.BroadcastDiscovery);
 
             // 发送到广播地址的56000端口
+            // 扫描仪收到后会将响应包发回本客户端绑定的源端口（56001）
 #if NET45_OR_GREATER
             IPEndPoint broadcastEP = new IPEndPoint(IPAddress.Broadcast, SdkPacketBuilder.DetectionPort);
 #elif NET9_0_OR_GREATER
             IPEndPoint broadcastEP = new(IPAddress.Broadcast, SdkPacketBuilder.DetectionPort);
 #endif
-            _broadcastClient?.Send(packet, packet.Length, broadcastEP);
+            _udpClient?.Send(packet, packet.Length, broadcastEP);
         }
 
         #endregion
