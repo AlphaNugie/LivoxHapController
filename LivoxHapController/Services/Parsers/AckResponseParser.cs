@@ -70,7 +70,21 @@ namespace LivoxHapController.Services.Parsers
             // key_num: 偏移1, uint16_t（协议无rsvd字段，ret_code后紧跟key_num）
             ushort paramNum = BitConverter.ToUInt16(packetData, 1);
 
-            // 解码所有KeyValue（从偏移3开始）
+            // 若ret_code非0，表示查询失败，无需解析key_value_list
+            if (retCode != 0)
+            {
+                return new InternalInfoResponse
+                {
+                    RetCode = retCode,
+#if NET45_OR_GREATER
+                    ParamResults = new KeyValueResult[0]
+#elif NET9_0_OR_GREATER
+                    ParamResults = []
+#endif
+                };
+            }
+
+            // 解码所有KeyValue
             KeyValueResult[] results = KeyValueCodec.DecodeAllKeyValuesForQueryAck(packetData, paramNum);
 
             return new InternalInfoResponse

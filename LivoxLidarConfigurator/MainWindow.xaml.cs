@@ -717,16 +717,22 @@ namespace LivoxLidarConfigurator
         }
 
         /// <summary>
-        /// ACK响应事件处理：显示命令执行结果
+        /// ACK响应事件处理：显示命令执行结果，包含Return Code的详细描述
         /// </summary>
         private void Radar_AckResponseReceived(object? sender, AsyncControlResponse response)
         {
             Dispatcher.Invoke(() =>
             {
                 if (response.IsSuccess)
-                    Log($"ACK: 命令执行成功 (RetCode=0)");
+                {
+                    Log($"ACK: 命令执行成功 (RetCode=0x00 - 执行成功)");
+                }
                 else
-                    LogError($"ACK: 命令执行失败 (RetCode={response.RetCode}, ErrorKey=0x{response.ErrorKey:X4})");
+                {
+                    // 使用ReturnCodeExtensions获取返回码描述
+                    string retCodeDesc = ReturnCodeExtensions.GetDescription(response.RetCode);
+                    LogError($"ACK: 命令执行失败 (RetCode={retCodeDesc}, ErrorKey=0x{response.ErrorKey:X4})");
+                }
             });
         }
 
@@ -742,7 +748,7 @@ namespace LivoxLidarConfigurator
         }
 
         /// <summary>
-        /// 设备状态更新事件处理：显示查询结果
+        /// 设备状态更新事件处理：显示查询结果，包含Return Code的详细描述
         /// </summary>
         private void Radar_DeviceStatusUpdated(object? sender, InternalInfoResponse info)
         {
@@ -765,7 +771,10 @@ namespace LivoxLidarConfigurator
                 }
                 else
                 {
-                    LogError($"设备状态查询失败: RetCode={info.RetCode}");
+                    // 查询失败时，显示Return Code的详细描述
+                    string retCodeDesc = ReturnCodeExtensions.GetDescription(info.RetCode);
+                    LogError($"设备状态查询失败: RetCode={retCodeDesc}");
+                    TxtQueryResult.Text = $"查询失败: {retCodeDesc}";
                 }
             });
         }

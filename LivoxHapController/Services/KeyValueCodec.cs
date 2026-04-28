@@ -194,6 +194,7 @@ namespace LivoxHapController.Services
 
         /// <summary>
         /// 从字节数组解码KeyValueParam
+        /// 包含边界检查，防止数据不完整时越界访问
         /// </summary>
         /// <param name="data">数据字节</param>
         /// <param name="offset">起始偏移</param>
@@ -202,9 +203,32 @@ namespace LivoxHapController.Services
         /// <returns>此KeyValueParam占用的总字节数（4 + value.Length）</returns>
         public static int DecodeKeyValue(byte[] data, int offset, out KeyType key, out byte[] value)
         {
+            // 边界检查：确保至少能读取key(2)和length(2)
+            if (data == null || offset < 0 || offset + KvHeaderSize > data.Length)
+            {
+                key = (KeyType)0xFFFF;
+#if NET45_OR_GREATER
+                value = new byte[0];
+#elif NET9_0_OR_GREATER
+                value = [];
+#endif
+                return 0;
+            }
+
             ushort keyVal = BitConverter.ToUInt16(data, offset);
             key = (KeyType)keyVal;
             ushort length = BitConverter.ToUInt16(data, offset + 2);
+
+            // 边界检查：确保value部分数据完整
+            if (offset + KvHeaderSize + length > data.Length)
+            {
+#if NET45_OR_GREATER
+                value = new byte[0];
+#elif NET9_0_OR_GREATER
+                value = [];
+#endif
+                return data.Length - offset;
+            }
 
             if (length == 0)
             {
