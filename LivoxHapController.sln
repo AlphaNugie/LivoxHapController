@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11520.95 d18.3
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LivoxHapController", "LivoxHapController\LivoxHapController.csproj", "{FDBF79DF-9781-4843-B2FF-4136B3813BC6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LivoxHapTest", "LivoxHapTest\LivoxHapTest.csproj", "{521B1812-8C40-4B8E-AF5E-E1FE12036FCA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LivoxHapController.Core", "LivoxHapController.Core\LivoxHapController.Core.csproj", "{F43CD9B9-6A2C-4700-A104-B351C965397B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LivoxLidarConfigurator", "LivoxLidarConfigurator\LivoxLidarConfigurator.csproj", "{8B2D6F0D-49E4-4779-A472-9ECE4FAB845F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FDBF79DF-9781-4843-B2FF-4136B3813BC6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FDBF79DF-9781-4843-B2FF-4136B3813BC6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FDBF79DF-9781-4843-B2FF-4136B3813BC6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FDBF79DF-9781-4843-B2FF-4136B3813BC6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{521B1812-8C40-4B8E-AF5E-E1FE12036FCA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{521B1812-8C40-4B8E-AF5E-E1FE12036FCA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{521B1812-8C40-4B8E-AF5E-E1FE12036FCA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{521B1812-8C40-4B8E-AF5E-E1FE12036FCA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F43CD9B9-6A2C-4700-A104-B351C965397B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F43CD9B9-6A2C-4700-A104-B351C965397B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F43CD9B9-6A2C-4700-A104-B351C965397B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F43CD9B9-6A2C-4700-A104-B351C965397B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B2D6F0D-49E4-4779-A472-9ECE4FAB845F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B2D6F0D-49E4-4779-A472-9ECE4FAB845F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B2D6F0D-49E4-4779-A472-9ECE4FAB845F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B2D6F0D-49E4-4779-A472-9ECE4FAB845F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {71BFF91F-FB14-4895-956C-3E8AE3DA1D26}
+	EndGlobalSection
+EndGlobal

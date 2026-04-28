@@ -1,0 +1,81 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>$(MSBuildProjectName.Replace(" ", "_").Replace(".Core", ""))</RootNamespace>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+  </PropertyGroup>
+	<ItemGroup>
+		<Compile Include="..\LivoxHapController\Models\DataPoints\DataPoint.cs">
+			<!-- 指定文件在项目中的虚拟路径（可选） -->
+			<Link>Models\DataPoints\DataPoint.cs</Link>
+		</Compile>
+		 <Compile Include="..\LivoxHapController\Models\DataPoints\ImuDataPoint.cs"> <Link>Models\DataPoints\ImuDataPoint.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Models\DataPoints\PointCloudDataPacket.cs"> <Link>Models\DataPoints\PointCloudDataPacket.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Models\DataPoints\CartesianDataPoint.cs"> <Link>Models\DataPoints\CartesianDataPoint.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Services\BufferManager.cs"> <Link>Services\BufferManager.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Services\CoordinateTransformer.cs"> <Link>Services\CoordinateTransformer.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Models\CoordTransParamSet.cs"> <Link>Models\CoordTransParamSet.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Services\DataBufferService.cs"> <Link>Services\DataBufferService.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Services\MathUtils.cs"> <Link>Services\MathUtils.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\Parsers\PacketInformation.cs"> <Link>Services\Parsers\PacketInformation.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Services\Parsers\PointCloudParser.cs"> <Link>Services\Parsers\PointCloudParser.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Models\DataPoints\PointCloudHeader.cs"> <Link>Models\DataPoints\PointCloudHeader.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Services\Parsers\PointTagInformation.cs"> <Link>Services\Parsers\PointTagInformation.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Enums\CommandType.cs"> <Link>Enums\CommandType.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Enums\DeviceWorkState.cs"> <Link>Enums\DeviceWorkState.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Enums\EncryptionType.cs"> <Link>Enums\EncryptionType.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Enums\FirmwareType.cs"> <Link>Enums\FirmwareType.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Enums\KeyType.cs"> <Link>Enums\KeyType.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Enums\LogType.cs"> <Link>Enums\LogType.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Enums\PointCloudDataType.cs"> <Link>Enums\PointCloudDataType.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Enums\ReturnCode.cs"> <Link>Enums\ReturnCode.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Enums\TimeType.cs"> <Link>Enums\TimeType.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Models\NetworkConfig.cs"> <Link>Models\NetworkConfig.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Services\Parsers\ProtocolParser.cs"> <Link>Services\Parsers\ProtocolParser.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Services\UdpCommunicator.cs"> <Link>Services\UdpCommunicator.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Test\LivoxHapQuickStart.cs"> <Link>Test\LivoxHapQuickStart.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Utilities\ObjectPool.cs"> <Link>Utilities\ObjectPool.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Config\AppConfig.cs"> <Link>Config\AppConfig.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Config\ConfigLoader.cs"> <Link>Config\ConfigLoader.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Config\DeviceConfig.cs"> <Link>Config\DeviceConfig.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Config\HostNetInfo.cs"> <Link>Config\HostNetInfo.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Config\NetInfoConfig.cs"> <Link>Config\NetInfoConfig.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Enums\DeviceEnums.cs"> <Link>Enums\DeviceEnums.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\CrcCalculator.cs"> <Link>Services\CrcCalculator.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\SdkPacketBuilder.cs"> <Link>Services\SdkPacketBuilder.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\KeyValueCodec.cs"> <Link>Services\KeyValueCodec.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\LidarDiscovery.cs"> <Link>Services\LidarDiscovery.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\LidarCommander.cs"> <Link>Services\LidarCommander.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\Parsers\AckResponseParser.cs"> <Link>Services\Parsers\AckResponseParser.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Models\LidarDeviceInfo.cs"> <Link>Models\LidarDeviceInfo.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\LivoxHapRadar.cs"> <Link>Services\LivoxHapRadar.cs</Link> </Compile>
+	</ItemGroup>
+	<ItemGroup>
+		 <!--<None Include="..\LivoxHapController\"> <Link></Link> </None>--> 
+		 <None Include="..\LivoxHapController\ConfigFiles\full_config.json"> <Link>ConfigFiles\full_config.json</Link> </None> 
+		 <None Include="..\LivoxHapController\ConfigFiles\hap_config.json"> <Link>ConfigFiles\hap_config.json</Link> </None> 
+		 <None Include="..\LivoxHapController\ConfigFiles\mid360_config.json"> <Link>ConfigFiles\mid360_config.json</Link> </None> 
+	</ItemGroup>
+	<ItemGroup>
+		<!--<Content Include="..\LivoxHapController\"> <Link></Link> </Content>--> 
+		<Content Include="..\LivoxHapController\ConfigFiles\readme.txt"> <Link>ConfigFiles\readme.txt</Link> </Content> 
+	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Reference Include="CommonLib.Core">
+	    <HintPath>..\..\..\..\..\CommonLib\CommonLib\CommonLib.Core\bin\Debug\net9.0\CommonLib.Core.dll</HintPath>
+	  </Reference>
+	</ItemGroup>
+	<ItemGroup>
+	  <Folder Include="bin\Debug\net9.0\" />
+	</ItemGroup>
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+	  <Exec Command="xcopy /e /r /y /exclude:D:\DLL\_uncopy.txt &quot;$(ProjectDir)bin\Debug\net9.0&quot; D:\DLL\AnyCpu\" />
+	</Target>
+
+</Project>

@@ -55,3 +55,11 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+/.vs/LivoxHapController
+/LivoxHapController/Reference
+*.user
+/LivoxLidarConfigurator/LivoxLidarConfigurator - 副本.csproj
+/.vs
+/packages/Newtonsoft.Json.13.0.3
+/CrcTest.cs
+/crc_test.csx

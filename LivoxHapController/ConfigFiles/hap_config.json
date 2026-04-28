@@ -1,0 +1,27 @@
+{
+  "lidar_log_path": "./",
+
+  "HAP": {
+    "walk_change_thres": "4",
+    "lidar_net_info": {
+      "cmd_data_port": 56000,
+      "push_msg_port": 0,
+      "point_data_port": 57000,
+      "imu_data_port": 58000,
+      "log_data_port": 59000
+    },
+    "host_net_info": [
+      {
+        "lidar_ip": [ "192.0.244.25" ],
+        "host_ip": "172.16.14.205",
+        "frame_time": 500,
+        "cmd_data_port": 56000,
+        "push_msg_port": 0,
+        "point_data_port": 57000,
+        "imu_data_port": 58000,
+        "log_data_port": 59000
+      }
+    ]
+  }
+}
+

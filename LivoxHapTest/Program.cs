@@ -1,0 +1,48 @@
+﻿using LivoxHapController.Services;
+using LivoxHapController.Services.Parsers;
+using LivoxHapController.Test;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace LivoxHapTest
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            #region 单次接收的点云数据
+            string test = "00 64 05 33 08 60 00 88 F1 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 2B 92 69 8C 91 E4 25 13 84 EA 05 00 D4 30 00 00 BC 04 00 00 5D 04 00 00 64 40 FD 3C 00 00 04 06 00 00 7B 07 00 00 3A 40 1E 46 00 00 0C 07 00 00 FA 0A 00 00 09 40 9F 30 00 00 E5 04 00 00 2B 05 00 00 38 40 97 37 00 00 B1 05 00 00 C0 07 00 00 09 40 33 45 00 00 39 07 00 00 FF 0B 00 00 45 40 8F 30 00 00 07 05 00 00 59 04 00 00 7D 40 08 3A 00 00 1C 06 00 00 22 07 00 00 50 40 73 45 00 00 73 07 00 00 E5 0A 00 00 14 40 86 30 00 00 34 05 00 00 2B 05 00 00 2D 40 3F 37 00 00 07 06 00 00 B8 07 00 00 0E 40 CD 44 00 00 A6 07 00 00 F3 0B 00 00 15 40 C5 30 00 00 5E 05 00 00 61 04 00 00 4B 40 A5 39 00 00 73 06 00 00 1A 07 00 00 4C 40 5F 46 00 00 05 08 00 00 10 0B 00 00 07 40 E3 30 00 00 91 05 00 00 39 05 00 00 20 40 03 37 00 00 5F 06 00 00 B4 07 00 00 19 40 76 44 00 00 14 08 00 00 EA 0B 00 00 0C 40 3A 31 00 00 BE 05 00 00 6F 04 00 00 35 40 4B 39 00 00 CB 06 00 00 13 07 00 00 46 40 DF 46 00 00 8F 08 00 00 2A 0B 00 00 65 40 33 31 00 00 ED 05 00 00 45 05 00 00 12 40 B8 36 00 00 B5 06 00 00 AE 07 00 00 1D 40 37 46 00 00 C3 08 00 00 3F 0C 00 00 18 40 9B 31 00 00 1D 06 00 00 7B 04 00 00 45 40 FC 38 00 00 23 07 00 00 0E 07 00 00 4D 40 A9 47 00 00 24 09 00 00 51 0B 00 00 23 40 9D 31 00 00 4F 06 00 00 54 05 00 00 02 40 5A 36 00 00 07 07 00 00 A6 07 00 00 24 40 B0 45 00 00 2D 09 00 00 2E 0C 00 00 25 40 FC 31 00 00 7E 06 00 00 88 04 00 00 39 40 B2 38 00 00 7C 07 00 00 0A 07 00 00 4B 40 1D 48 00 00 B0 09 00 00 6A 0B 00 00 41 40 D6 3A 00 00 DF 07 00 00 56 06 00 00 27 40 13 36 00 00 5C 07 00 00 A1 07 00 00 25 40 80 45 00 00 A1 09 00 00 2D 0C 00 00 3A 40 64 32 00 00 E1 06 00 00 95 04 00 00 34 40 5A 38 00 00 D1 07 00 00 04 07 00 00 4C 40 5D 48 00 00 38 0A 00 00 7B 0B 00 00 22 40 C2 39 00 00 1D 08 00 00 3D 06 00 00 22 40 C1 35 00 00 AD 07 00 00 9A 07 00 00 26 40 AF 45 00 00 22 0A 00 00 3D 0C 00 00 30 40 CE 32 00 00 46 07 00 00 A2 04 00 00 3E 40 56 38 00 00 32 08 00 00 08 07 00 00 43 40 E7 47 00 00 A5 0A 00 00 70 0B 00 00 21 40 C5 39 00 00 80 08 00 00 42 06 00 00 2E 40 6E 35 00 00 FF 07 00 00 94 07 00 00 27 40 AF 45 00 00 9E 0A 00 00 45 0C 00 00 2E 40 37 33 00 00 AD 07 00 00 B0 04 00 00 51 40 F4 38 00 00 AB 08 00 00 21 07 00 00 35 40 81 47 00 00 13 0B 00 00 67 0B 00 00 2F 40 F0 38 00 00 C3 08 00 00 30 06 00 00 41 40 53 35 00 00 58 08 00 00 96 07 00 00 2F 40 96 45 00 00 16 0B 00 00 48 0C 00 00 2D 40 98 33 00 00 13 08 00 00 BD 04 00 00 52 40 90 39 00 00 27 09 00 00 3A 07 00 00 31 40 20 47 00 00 82 0B 00 00 60 0B 00 00 29 40 66 39 00 00 39 09 00 00 42 06 00 00 1C 40 47 36 00 00 DE 08 00 00 BE 07 00 00 26 40 AF 45 00 00 95 0B 00 00 55 0C 00 00 32 40 11 34 00 00 80 08 00 00 CD 04 00 00 4C 40 DA 39 00 00 98 09 00 00 49 07 00 00 15 40 C7 46 00 00 F1 0B 00 00 5A 0B 00 00 24 40 C7 39 00 00 AD 09 00 00 52 06 00 00 28 40 C7 36 00 00 53 09 00 00 D6 07 00 00 1E 40 4F 46 00 00 2E 0C 00 00 7A 0C 00 00 19 40 89 34 00 00 EE 08 00 00 DC 04 00 00 4D 40 9D 39 00 00 F3 09 00 00 47 07 00 00 1E 40 6B 46 00 00 5E 0C 00 00 53 0B 00 00 1F 40 88 39 00 00 06 0A 00 00 51 06 00 00 1E 40 98 37 00 00 D9 09 00 00 FA 07 00 00 25 40 16 45 00 00 74 0C 00 00 4C 0C 00 00 19 40 EB 34 00 00 5B 09 00 00 EA 04 00 00 4C 40 87 39 00 00 53 0A 00 00 4B 07 00 00 1C 40 3F 46 00 00 D4 0C 00 00 55 0B 00 00 2B 40 02 39 00 00 53 0A 00 00 48 06 00 00 01 48 03 38 00 00 4E 0A 00 00 10 08 00 00 27 40 68 45 00 00 FF 0C 00 00 64 0C 00 00 24 40 6C 35 00 00 CE 09 00 00 FB 04 00 00 49 40 DE 38 00 00 9A 0A 00 00 3B 07 00 00 14 40 AE 45 00 00 37 0D 00 00 46 0B 00 00 1B 40 C2 38 00 00 AA 0A 00 00 47 06 00 00 14 40 92 38 00 00 CD 0A 00 00 2B 08 00 00 24 40 52 40 00 00 80 0C 00 00 84 0B 00 00 1D 40 DD 35 00 00 41 0A 00 00 0B 05 00 00 4A 40 98 38 00 00 F0 0A 00 00 39 07 00 00 19 40 37 3D 00 00 0B 0C 00 00 F0 09 00 00 09 40 86 38 00 00 03 0B 00 00 46 06 00 00 14 40 96 3A 00 00 99 0B 00 00 7D 08 00 00 2F 40 18 39 00 00 81 0B 00 00 41 0A 00 00 0F 40 67 36 00 00 BB 0A 00 00 1E 05 00 00 45 40 69 38 00 00 4C 0B 00 00 3A 07 00 00 1D 40 0B 39 00 00 9F 0B 00 00 4A 09 00 00 16 40 40 38 00 00 59 0B 00 00 45 06 00 00 15 40 51 39 00 00 C0 0B 00 00 55 08 00 00 2D 40 DC 37 00 00 A7 0B 00 00 10 0A 00 00 12 40";
+            #endregion
+            var packet = PointCloudParser.ParsePacket(test);
+            Console.WriteLine(packet.ToString());
+            UdpCommunicator udpComm = new UdpCommunicator(), udpComm2 = new UdpCommunicator();
+            udpComm.StartListening("", 10086, 10087, 10088);
+            udpComm.StartListening("127.0.0.1", 11086, 11087, 11088);
+            udpComm.PointCloudDataReceived += UdpComm_PointCloudDataReceived;
+            LivoxHapQuickStart.Start();
+            int count = 0;
+            while (++count <= 250)
+            {
+                Thread.Sleep(3000);
+                var points = LivoxHapQuickStart.GetCurrentFrameOfRawPoints();
+                Console.WriteLine("current frame points: " + points.Length);
+                if (points.Length > 0)
+                {
+                    Console.WriteLine("1st point: " + points[0].ToString());
+                    Console.WriteLine("last point: " + points[points.Length - 1].ToString());
+                }
+            }
+            Console.ReadLine();
+        }
+
+        private static void UdpComm_PointCloudDataReceived(object sender, byte[] e)
+        {
+            var packet = PointCloudParser.ParsePacket(e);
+            Console.WriteLine(packet.ToString());
+        }
+    }
+}

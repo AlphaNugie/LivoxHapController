@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="bin\Debug\net10.0-windows\ConfigFiles\**" />
+    <EmbeddedResource Remove="bin\Debug\net10.0-windows\ConfigFiles\**" />
+    <None Remove="bin\Debug\net10.0-windows\ConfigFiles\**" />
+    <Page Remove="bin\Debug\net10.0-windows\ConfigFiles\**" />
+  </ItemGroup>
+
+  <!-- 以Link方式引用 LivoxHapController 项目的所有源文件 -->
+
+  <!-- 配置文件 -->
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LivoxHapController.Core\LivoxHapController.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="bin\Debug\net10.0-windows\" />
+  </ItemGroup>
+
+  <!-- 引用 CommonLib.Core（.NET Core版本，提供 HexHelper、DateTimeHelper 等工具类） -->
+
+</Project>
