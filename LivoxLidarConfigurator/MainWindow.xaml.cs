@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Media;
+using LivoxHapController.Config;
 using LivoxHapController.Enums;
 using LivoxHapController.Models;
 using LivoxHapController.Services;
@@ -67,7 +68,7 @@ namespace LivoxLidarConfigurator
         }
 
         /// <summary>
-        /// 初始化雷达管理器
+        /// 初始化雷达管理器（从配置文件加载）
         /// </summary>
         private void BtnInitialize_Click(object sender, RoutedEventArgs e)
         {
@@ -76,26 +77,84 @@ namespace LivoxLidarConfigurator
                 _radar = new LivoxHapRadar();
 
                 // 订阅事件
-                _radar.DeviceDiscovered += Radar_DeviceDiscovered;
-                _radar.AckResponseReceived += Radar_AckResponseReceived;
-                _radar.PushMessageReceived += Radar_PushMessageReceived;
-                _radar.DeviceStatusUpdated += Radar_DeviceStatusUpdated;
-                _radar.PointCloudDataReceived += Radar_PointCloudDataReceived;
-                _radar.ImuDataReceived += Radar_ImuDataReceived;
+                SubscribeRadarEvents();
 
-                // 初始化
+                // 从配置文件初始化
                 _radar.Initialize(TxtConfigFile.Text.Trim());
                 Log($"初始化成功，配置文件: {TxtConfigFile.Text.Trim()}");
 
                 // 更新UI状态
-                BtnInitialize.IsEnabled = false;
-                BtnDiscover.IsEnabled = true;
-                TxtConfigFile.IsEnabled = false;
+                UpdateUiAfterInit("配置文件");
             }
             catch (Exception ex)
             {
                 LogError($"初始化失败: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// 直接初始化雷达管理器（不依赖配置文件）
+        /// 使用当前主机IP文本框的值和默认端口创建AppConfig进行初始化
+        /// </summary>
+        private void BtnInitDirect_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string hostIp = TxtHostIp.Text.Trim();
+                if (string.IsNullOrWhiteSpace(hostIp))
+                {
+                    LogError("请输入主机IP地址");
+                    return;
+                }
+
+                _radar = new LivoxHapRadar();
+
+                // 订阅事件
+                SubscribeRadarEvents();
+
+                // 使用 AppConfig 对象直接初始化，覆盖主机IP
+                _radar.Initialize(
+                    appConfig: new AppConfig(),
+                    hostIp: hostIp
+                );
+                Log($"直接初始化成功，主机IP: {hostIp}");
+
+                // 更新UI状态
+                UpdateUiAfterInit("直接");
+            }
+            catch (Exception ex)
+            {
+                LogError($"直接初始化失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 订阅雷达管理器事件
+        /// 两种初始化方式共用此方法，避免重复代码
+        /// </summary>
+        private void SubscribeRadarEvents()
+        {
+            if (_radar == null) return;
+
+            _radar.DeviceDiscovered += Radar_DeviceDiscovered;
+            _radar.AckResponseReceived += Radar_AckResponseReceived;
+            _radar.PushMessageReceived += Radar_PushMessageReceived;
+            _radar.DeviceStatusUpdated += Radar_DeviceStatusUpdated;
+            _radar.PointCloudDataReceived += Radar_PointCloudDataReceived;
+            _radar.ImuDataReceived += Radar_ImuDataReceived;
+        }
+
+        /// <summary>
+        /// 初始化成功后更新UI状态
+        /// 两种初始化方式共用此方法
+        /// </summary>
+        /// <param name="initMode">初始化模式名称（用于日志）</param>
+        private void UpdateUiAfterInit(string initMode)
+        {
+            BtnInitialize.IsEnabled = false;
+            BtnInitDirect.IsEnabled = false;
+            BtnDiscover.IsEnabled = true;
+            TxtConfigFile.IsEnabled = false;
         }
 
         /// <summary>

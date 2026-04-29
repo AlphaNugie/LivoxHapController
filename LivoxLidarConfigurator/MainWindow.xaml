@@ -78,6 +78,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- 配置文件路径 -->
@@ -90,11 +91,13 @@
                 <TextBox Grid.Column="4" x:Name="TxtHostIp" Text="192.168.1.50" Style="{StaticResource FieldInput}" Width="120"/>
 
                 <!-- 初始化按钮 -->
-                <Button Grid.Column="5" x:Name="BtnInitialize" Content="初始化" Click="BtnInitialize_Click" Style="{StaticResource ActionButton}" Margin="8,2"/>
+                <Button Grid.Column="5" x:Name="BtnInitialize" Content="文件初始化" Click="BtnInitialize_Click" Style="{StaticResource ActionButton}" Margin="8,2"/>
+                <!-- 直接初始化按钮 -->
+                <Button Grid.Column="6" x:Name="BtnInitDirect" Content="直接初始化" Click="BtnInitDirect_Click" Style="{StaticResource SuccessButton}" Margin="4,2" ToolTip="不依赖配置文件，使用当前主机IP和默认端口直接初始化"/>
                 <!-- 发现按钮 -->
-                <Button Grid.Column="6" x:Name="BtnDiscover" Content="开始发现" Click="BtnDiscover_Click" Style="{StaticResource SuccessButton}" IsEnabled="False" Margin="4,2"/>
+                <Button Grid.Column="7" x:Name="BtnDiscover" Content="开始发现" Click="BtnDiscover_Click" Style="{StaticResource SuccessButton}" IsEnabled="False" Margin="4,2"/>
                 <!-- 停止发现 -->
-                <Button Grid.Column="7" x:Name="BtnStopDiscover" Content="停止发现" Click="BtnStopDiscover_Click" Style="{StaticResource DangerButton}" IsEnabled="False" Margin="4,2"/>
+                <Button Grid.Column="8" x:Name="BtnStopDiscover" Content="停止发现" Click="BtnStopDiscover_Click" Style="{StaticResource DangerButton}" IsEnabled="False" Margin="4,2"/>
             </Grid>
         </GroupBox>
 
