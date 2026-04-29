@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Text;
+using LivoxHapController.Enums;
 
 namespace LivoxHapController.Models
 {
@@ -20,10 +21,10 @@ namespace LivoxHapController.Models
         public int Handle { get; set; }
 
         /// <summary>
-        /// 设备类型（见LivoxLidarDeviceType枚举）
-        /// 1=Mid40, 6=Mid70, 7=Avia, 9=Mid360, 10=IndustrialHAP, 15=HAP, 16=PA
+        /// 设备类型枚举（见 DeviceType 枚举定义）
+        /// 使用枚举类型替代原始 byte，提供类型安全和可读性
         /// </summary>
-        public byte DeviceType { get; set; }
+        public DeviceType DeviceType { get; set; }
 
         /// <summary>
         /// 设备序列号（原始16字节ASCII数据）
@@ -88,38 +89,12 @@ namespace LivoxHapController.Models
 
         /// <summary>
         /// 设备类型名称
-        /// 根据DeviceType值返回可读的设备型号名称
+        /// 使用 DeviceTypeExtensions.GetDisplayName() 获取可读的设备型号名称
+        /// 消除了原有的硬编码 switch 映射，复用枚举扩展方法
         /// </summary>
         public string DeviceTypeName
         {
-            get
-            {
-#if NET45_OR_GREATER
-                switch (DeviceType)
-                {
-                    case 1: return "Mid40";
-                    case 6: return "Mid70";
-                    case 7: return "Avia";
-                    case 9: return "Mid360";
-                    case 10: return "IndustrialHAP";
-                    case 15: return "HAP";
-                    case 16: return "PA";
-                    default: return string.Format("Unknown({0})", DeviceType);
-                }
-#elif NET9_0_OR_GREATER
-                return DeviceType switch
-                {
-                    1 => "Mid40",
-                    6 => "Mid70",
-                    7 => "Avia",
-                    9 => "Mid360",
-                    10 => "IndustrialHAP",
-                    15 => "HAP",
-                    16 => "PA",
-                    _ => string.Format("Unknown({0})", DeviceType),
-                };
-#endif
-            }
+            get { return DeviceType.GetDisplayName(); }
         }
 
         /// <summary>
@@ -144,7 +119,7 @@ namespace LivoxHapController.Models
         public LidarDeviceInfo()
         {
             Handle = -1;
-            DeviceType = 0;
+            DeviceType = DeviceType.Hub;
             SerialNumber = new byte[16];
             LidarIpBytes = new byte[4];
             CommandPort = 56000;
@@ -156,12 +131,12 @@ namespace LivoxHapController.Models
         /// 从设备发现事件参数构造设备信息
         /// </summary>
         /// <param name="handle">设备句柄</param>
-        /// <param name="deviceType">设备类型</param>
+        /// <param name="deviceType">设备类型枚举</param>
         /// <param name="serialNumber">序列号（16字节）</param>
         /// <param name="lidarIp">雷达IP（4字节）</param>
         /// <param name="commandPort">命令端口</param>
         /// <param name="remoteEndPoint">响应来源端点</param>
-        public LidarDeviceInfo(int handle, byte deviceType, byte[] serialNumber, byte[] lidarIp,
+        public LidarDeviceInfo(int handle, DeviceType deviceType, byte[] serialNumber, byte[] lidarIp,
             ushort commandPort, IPEndPoint remoteEndPoint)
         {
             Handle = handle;
@@ -185,7 +160,7 @@ namespace LivoxHapController.Models
         public override string ToString()
         {
             return string.Format("[Handle={0}, Type={1}({2}), SN={3}, IP={4}:{5}]",
-                Handle, DeviceTypeName, DeviceType, SerialNumberString, LidarIpString, CommandPort);
+                Handle, DeviceTypeName, (byte)DeviceType, SerialNumberString, LidarIpString, CommandPort);
         }
 
         #endregion

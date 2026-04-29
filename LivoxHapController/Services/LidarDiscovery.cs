@@ -185,6 +185,10 @@ namespace LivoxHapController.Services
             {
                 try
                 {
+                    // 确保 _udpClient 已经被初始化
+                    if (_udpClient == null)
+                        throw new InvalidOperationException("_udpClient 未初始化");
+
                     IPEndPoint
                         //.net 9框架下使返回对象可为空
 #if NET9_0_OR_GREATER
@@ -209,8 +213,11 @@ namespace LivoxHapController.Services
                             var response = Parsers.ProtocolParser.ParseBroadcastResponse(dataSegment);
 
                             // 触发设备发现事件
+                            // 将协议中的byte设备类型转换为DeviceType枚举
+                            var deviceType = DeviceTypeExtensions.SafeParse(response.DevType)
+                                ?? (DeviceType)response.DevType;
                             var args = new DeviceDiscoveredEventArgs(
-                                response.DevType,
+                                deviceType,
                                 response.SerialNumber,
                                 response.LidarIp,
                                 response.CmdPort,
@@ -267,8 +274,8 @@ namespace LivoxHapController.Services
     /// </summary>
     public class DeviceDiscoveredEventArgs : EventArgs
     {
-        /// <summary>设备类型（见LivoxLidarDeviceType枚举）</summary>
-        public byte DeviceType { get; private set; }
+        /// <summary>设备类型枚举（见 DeviceType 枚举定义）</summary>
+        public DeviceType DeviceType { get; private set; }
 
         /// <summary>设备序列号（16字节ASCII）</summary>
         public byte[] SerialNumber { get; private set; }
@@ -285,12 +292,12 @@ namespace LivoxHapController.Services
         /// <summary>
         /// 构造设备发现事件参数
         /// </summary>
-        /// <param name="deviceType">设备类型</param>
+        /// <param name="deviceType">设备类型枚举</param>
         /// <param name="serialNumber">序列号（16字节）</param>
         /// <param name="lidarIp">雷达IP（4字节）</param>
         /// <param name="commandPort">命令端口</param>
         /// <param name="remoteEndPoint">响应来源端点</param>
-        public DeviceDiscoveredEventArgs(byte deviceType, byte[] serialNumber, byte[] lidarIp,
+        public DeviceDiscoveredEventArgs(DeviceType deviceType, byte[] serialNumber, byte[] lidarIp,
             ushort commandPort, IPEndPoint remoteEndPoint)
         {
             DeviceType = deviceType;
@@ -307,16 +314,16 @@ namespace LivoxHapController.Services
     /// <remarks>
     /// 构造设备发现事件参数
     /// </remarks>
-    /// <param name="deviceType">设备类型</param>
+    /// <param name="deviceType">设备类型枚举</param>
     /// <param name="serialNumber">序列号（16字节）</param>
     /// <param name="lidarIp">雷达IP（4字节）</param>
     /// <param name="commandPort">命令端口</param>
     /// <param name="remoteEndPoint">响应来源端点</param>
-    public class DeviceDiscoveredEventArgs(byte deviceType, byte[] serialNumber, byte[] lidarIp,
+    public class DeviceDiscoveredEventArgs(DeviceType deviceType, byte[] serialNumber, byte[] lidarIp,
         ushort commandPort, IPEndPoint remoteEndPoint) : EventArgs
     {
-        /// <summary>设备类型（见LivoxLidarDeviceType枚举）</summary>
-        public byte DeviceType { get; private set; } = deviceType;
+        /// <summary>设备类型枚举（见 DeviceType 枚举定义）</summary>
+        public DeviceType DeviceType { get; private set; } = deviceType;
 
         /// <summary>设备序列号（16字节ASCII）</summary>
         public byte[] SerialNumber { get; private set; } = serialNumber;
@@ -354,37 +361,13 @@ namespace LivoxHapController.Services
             }
         }
 
-        /// <summary>设备类型名称</summary>
+        /// <summary>
+        /// 设备类型名称
+        /// 使用 DeviceTypeExtensions.GetDisplayName() 获取可读名称，复用枚举扩展方法
+        /// </summary>
         public string DeviceTypeName
         {
-            get
-            {
-#if NET45_OR_GREATER
-                switch (DeviceType)
-                {
-                    case 1: return "Mid40";
-                    case 6: return "Mid70";
-                    case 7: return "Avia";
-                    case 9: return "Mid360";
-                    case 10: return "IndustrialHAP";
-                    case 15: return "HAP";
-                    case 16: return "PA";
-                    default: return string.Format("Unknown({0})", DeviceType);
-                }
-#elif NET9_0_OR_GREATER
-                return DeviceType switch
-                {
-                    1 => "Mid40",
-                    6 => "Mid70",
-                    7 => "Avia",
-                    9 => "Mid360",
-                    10 => "IndustrialHAP",
-                    15 => "HAP",
-                    16 => "PA",
-                    _ => string.Format("Unknown({0})", DeviceType),
-                };
-#endif
-            }
+            get { return DeviceType.GetDisplayName(); }
         }
     }
 }

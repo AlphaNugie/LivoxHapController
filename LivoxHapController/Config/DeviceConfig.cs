@@ -44,7 +44,11 @@ namespace LivoxHapController.Config
         {
             if (HostNetInfo == null || HostNetInfo.Count == 0)
             {
+#if NET45_OR_GREATER
                 HostNetInfo = new List<HostNetInfo> { new HostNetInfo() };
+#elif NET9_0_OR_GREATER
+                HostNetInfo = [new HostNetInfo()];
+#endif
             }
             return HostNetInfo;
         }
