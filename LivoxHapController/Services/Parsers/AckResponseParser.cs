@@ -63,7 +63,13 @@ namespace LivoxHapController.Services.Parsers
         {
             // 最小长度：ret_code(1) + key_num(2) = 3字节
             if (packetData == null || packetData.Length < 3)
-                return new InternalInfoResponse { RetCode = 0xFF, ParamResults = new KeyValueResult[0] };
+                return new InternalInfoResponse { RetCode = 0xFF,
+#if NET45_OR_GREATER
+                    ParamResults = new KeyValueResult[0]
+#elif NET9_0_OR_GREATER
+                    ParamResults = []
+#endif
+                };
 
             // ret_code: 偏移0, uint8_t
             byte retCode = packetData[0];
@@ -103,7 +109,13 @@ namespace LivoxHapController.Services.Parsers
         {
             // 最小长度：包头(24) + ret_code(1) + key_num(2) = 27字节
             if (fullPacket == null || fullPacket.Length < SdkPacketBuilder.HeaderSize + 3)
-                return new InternalInfoResponse { RetCode = 0xFF, ParamResults = new KeyValueResult[0] };
+                return new InternalInfoResponse { RetCode = 0xFF,
+#if NET45_OR_GREATER
+                    ParamResults = new KeyValueResult[0]
+#elif NET9_0_OR_GREATER
+                    ParamResults = []
+#endif
+                };
 
             byte[] dataSegment = new byte[fullPacket.Length - SdkPacketBuilder.HeaderSize];
             Buffer.BlockCopy(fullPacket, SdkPacketBuilder.HeaderSize, dataSegment, 0, dataSegment.Length);
@@ -168,7 +180,13 @@ namespace LivoxHapController.Services.Parsers
         public ushort ErrorKey;
 
         /// <summary>是否成功</summary>
-        public bool IsSuccess { get { return RetCode == 0; } }
+        public
+            //.net 9框架下特性，显式声明属性为只读
+            //.net 4.5及以下版本下，编译器会自动生成只读属性，不需要显式声明
+#if NET9_0_OR_GREATER
+            readonly
+#endif
+            bool IsSuccess { get { return RetCode == 0; } }
     }
 
     /// <summary>
@@ -184,7 +202,14 @@ namespace LivoxHapController.Services.Parsers
         public KeyValueResult[] ParamResults;
 
         /// <summary>是否成功</summary>
-        public bool IsSuccess { get { return RetCode == 0; } }
+        public
+            //.net 9框架下特性，显式声明属性为只读
+            //.net 4.5及以下版本下，编译器会自动生成只读属性，不需要显式声明
+#if NET9_0_OR_GREATER
+            readonly
+#endif
+            bool IsSuccess
+        { get { return RetCode == 0; } }
     }
 
     #endregion

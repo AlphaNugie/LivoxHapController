@@ -32,9 +32,6 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="CommonLib">
-      <HintPath>..\..\..\..\..\CommonLib\CommonLib\CommonLib\bin\Debug\CommonLib.dll</HintPath>
-    </Reference>
     <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
@@ -49,6 +46,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Config\AppConfig.cs" />
+    <Compile Include="Config\AppConfigBuilder.cs" />
     <Compile Include="Config\ConfigLoader.cs" />
     <Compile Include="Config\DeviceConfig.cs" />
     <Compile Include="Config\HostNetInfo.cs" />
@@ -80,6 +78,8 @@
     <Compile Include="Services\Parsers\ProtocolParser.cs" />
     <Compile Include="Services\UdpCommunicator.cs" />
     <Compile Include="Test\LivoxHapQuickStart.cs" />
+    <Compile Include="Utilities\DateTimeUtils.cs" />
+    <Compile Include="Utilities\HexUtils.cs" />
     <Compile Include="Utilities\ObjectPool.cs" />
     <Compile Include="Enums\DeviceEnums.cs" />
     <Compile Include="Services\CrcCalculator.cs" />
@@ -96,7 +96,6 @@
     <None Include="ConfigFiles\hap_config.json" />
     <None Include="ConfigFiles\mid360_config.json" />
     <None Include="packages.config" />
-    <None Include="Readme.md" />
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>

@@ -350,6 +350,7 @@ namespace LivoxHapController.Services
         /// 设置状态信息主机IP配置
         /// 对应C++ CommandImpl::SetLivoxLidarStateInfoHostIPCfg()
         /// 使用 kKeyStateInfoHostIpCfg (0x0005) 键
+        /// <para/>HAP (TX) 暂不支持
         /// </summary>
         /// <param name="hostIp">主机IP地址</param>
         /// <param name="hostPort">主机端口</param>

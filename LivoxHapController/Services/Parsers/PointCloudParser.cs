@@ -1,5 +1,5 @@
 ﻿#if NET45_OR_GREATER
-using CommonLib.Function;
+//using CommonLib.Function;
 using System;
 using System.Collections.Generic;
 #elif NET9_0_OR_GREATER
@@ -7,6 +7,7 @@ using CommonLib.Helpers;
 #endif
 using LivoxHapController.Enums;
 using LivoxHapController.Models.DataPoints;
+using LivoxHapController.Utilities;
 
 namespace LivoxHapController.Services.Parsers
 {
@@ -26,7 +27,7 @@ namespace LivoxHapController.Services.Parsers
             // 校验数据长度
             if (string.IsNullOrWhiteSpace(dataStr))
                 throw new ArgumentException("Invalid data length for point cloud packet");
-            byte[] data = HexHelper.HexString2Bytes(dataStr);
+            byte[] data = HexUtils.HexString2Bytes(dataStr);
             return ParsePacket(data);
         }
 

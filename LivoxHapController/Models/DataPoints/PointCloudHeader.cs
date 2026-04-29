@@ -1,5 +1,7 @@
-﻿using CommonLib.Helpers;
+﻿//using CommonLib.Helpers;
 using LivoxHapController.Enums;
+using LivoxHapController.Utilities;
+
 #if NET45_OR_GREATER
 using System;
 #endif
@@ -127,7 +129,7 @@ namespace LivoxHapController.Models.DataPoints
             internal set
             {
                 _timestampNanoSec = value;
-                Timestamp = DateTimeHelper.GetUtcTimeByTimeStampMillisec(value / 1000);
+                Timestamp = DateTimeUtils.GetUtcTimeByTimeStampMillisec(value / 1000);
             }
         }
 

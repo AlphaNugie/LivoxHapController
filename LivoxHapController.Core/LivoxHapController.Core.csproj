@@ -38,7 +38,10 @@
 		 <Compile Include="..\LivoxHapController\Services\UdpCommunicator.cs"> <Link>Services\UdpCommunicator.cs</Link> </Compile> 
 		 <Compile Include="..\LivoxHapController\Test\LivoxHapQuickStart.cs"> <Link>Test\LivoxHapQuickStart.cs</Link> </Compile> 
 		 <Compile Include="..\LivoxHapController\Utilities\ObjectPool.cs"> <Link>Utilities\ObjectPool.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Utilities\HexUtils.cs"> <Link>Utilities\HexUtils.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Utilities\DateTimeUtils.cs"> <Link>Utilities\DateTimeUtils.cs</Link> </Compile> 
 		 <Compile Include="..\LivoxHapController\Config\AppConfig.cs"> <Link>Config\AppConfig.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Config\AppConfigBuilder.cs"> <Link>Config\AppConfigBuilder.cs</Link> </Compile> 
 		 <Compile Include="..\LivoxHapController\Config\ConfigLoader.cs"> <Link>Config\ConfigLoader.cs</Link> </Compile> 
 		 <Compile Include="..\LivoxHapController\Config\DeviceConfig.cs"> <Link>Config\DeviceConfig.cs</Link> </Compile> 
 		 <Compile Include="..\LivoxHapController\Config\HostNetInfo.cs"> <Link>Config\HostNetInfo.cs</Link> </Compile> 
