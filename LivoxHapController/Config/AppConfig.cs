@@ -16,7 +16,7 @@ namespace LivoxHapController.Config
         /// <summary>
         /// 应用程序配置实例
         /// </summary>
-        public static AppConfig Instance { get; private set; } = new AppConfig();
+        public static AppConfig Instance { get; internal set; } = new AppConfig();
 
         /// <summary>
         /// 是否启用主SDK
@@ -57,6 +57,7 @@ namespace LivoxHapController.Config
 
         /// <summary>
         /// 通过配置文件初始化应用程序配置
+        /// 内部使用 AppConfigBuilder 构建配置
         /// </summary>
         /// <param name="configFile">配置文件路径或文件名</param>
         /// <exception cref="ArgumentNullException">配置文件路径为空</exception>
@@ -69,77 +70,36 @@ namespace LivoxHapController.Config
             if (!File.Exists(path))
                 throw new ArgumentException("Config file does not exist, check again.", nameof(configFile));
 
-            Instance = ConfigLoader.LoadConfig(path);
+            // 使用 AppConfigBuilder 从文件加载并构建配置，同时更新全局单例
+            Instance = AppConfigBuilder.FromFile(path).BuildAndSetInstance();
         }
 
         /// <summary>
         /// 通过AppConfig实体初始化应用程序配置
         /// 可选参数的值将覆盖到appConfig实体对应字段中（仅当可选参数非null/非默认值时覆盖）
+        /// 内部使用 AppConfigBuilder 构建配置
         /// </summary>
         /// <param name="appConfig">应用程序配置实体，作为基础配置</param>
-        /// <param name="masterSdk">是否启用主SDK（可选，默认true，覆盖appConfig.MasterSdk）</param>
-        /// <param name="walkChangeThres">步态切换阈值（可选，默认1，覆盖appConfig.HapConfig.WalkChangedThreshold/appConfig.Mid360Config.WalkChangedThreshold）</param>
-        /// <param name="lidarIp">扫描仪ip地址</param>
-        /// <param name="hostIp">主机ip地址</param>
-        /// <param name="point_data_port">接收点云的端口号（可选，默认57000）</param>
+        /// <param name="masterSdk">是否启用主SDK（可选，默认null，覆盖appConfig.MasterSdk）</param>
+        /// <param name="walkChangeThres">步态切换阈值（可选，默认null，覆盖appConfig.HapConfig.WalkChangedThreshold/appConfig.Mid360Config.WalkChangedThreshold）</param>
+        /// <param name="lidarIp">扫描仪ip地址（可选，默认空字符串）</param>
+        /// <param name="hostIp">主机ip地址（可选，默认空字符串）</param>
+        /// <param name="point_data_port">接收点云的端口号（可选，默认null）</param>
         /// <exception cref="ArgumentNullException">appConfig为空</exception>
         ///// <param name="lidarLogEnable">是否启用LiDAR日志（可选，默认true，覆盖appConfig.LidarLogEnable）</param>
         ///// <param name="lidarLogCacheSizeMB">LiDAR日志缓存大小MB（可选，默认500，覆盖appConfig.LidarLogCacheSizeMB）</param>
         ///// <param name="lidarLogPath">LiDAR日志存储路径（可选，默认"./"，覆盖appConfig.LidarLogPath）</param>
         public static void Init(AppConfig appConfig,
-            bool? masterSdk = true,
-            //bool? lidarLogEnable = true,
-            //int? lidarLogCacheSizeMB = 500,
-            //string lidarLogPath = @"./",
-            double? walkChangeThres = 1, string lidarIp = "", string hostIp = "", int? point_data_port = 57000)
+            bool? masterSdk = null, double? walkChangeThres = null, string lidarIp = "", string hostIp = "", int? point_data_port = null)
         {
-            //if (appConfig == null)
-            //    throw new ArgumentNullException(nameof(appConfig), "AppConfig实例不能为空");
-#if NET45_OR_GREATER
-            if (appConfig == null)
-                appConfig = new AppConfig();
-#elif NET9_0_OR_GREATER
-            appConfig ??= new AppConfig();
-#endif
-
-            // 将可选参数的值覆盖到appConfig实体中
-            if (masterSdk.HasValue)
-                appConfig.MasterSdk = masterSdk.Value;
-            //if (lidarLogEnable.HasValue)
-            //    appConfig.LidarLogEnable = lidarLogEnable.Value;
-            //if (lidarLogCacheSizeMB.HasValue)
-            //    appConfig.LidarLogCacheSizeMB = lidarLogCacheSizeMB.Value;
-            //if (!string.IsNullOrEmpty(lidarLogPath))
-            //    appConfig.LidarLogPath = lidarLogPath;
-#if NET45_OR_GREATER
-            if (appConfig.HapConfig == null)
-                appConfig.HapConfig = new DeviceConfig();
-            if (appConfig.Mid360Config == null)
-                appConfig.Mid360Config = new DeviceConfig();
-#elif NET9_0_OR_GREATER
-            appConfig.HapConfig ??= new DeviceConfig();
-            appConfig.Mid360Config ??= new DeviceConfig();
-#endif
-
-            // 确保HostNetInfo列表至少包含一个默认元素（属性初始化时不再预填，避免JSON反序列化追加重复）
-            appConfig.HapConfig.EnsureHostNetInfo();
-            appConfig.Mid360Config.EnsureHostNetInfo();
-
-            if (walkChangeThres.HasValue)
-                appConfig.HapConfig.WalkChangedThreshold = appConfig.Mid360Config.WalkChangedThreshold = walkChangeThres.Value;
-            if (!string.IsNullOrWhiteSpace(lidarIp))
-                appConfig.HapConfig.HostNetInfo[0].LidarIp = appConfig.Mid360Config.HostNetInfo[0].LidarIp =
-#if NET45_OR_GREATER
-                    new List<string> { lidarIp };
-#elif NET9_0_OR_GREATER
-                    [lidarIp];
-#endif
-            if (!string.IsNullOrWhiteSpace(hostIp))
-                appConfig.HapConfig.HostNetInfo[0].HostIp = appConfig.Mid360Config.HostNetInfo[0].HostIp = hostIp;
-            if (point_data_port.HasValue)
-                appConfig.HapConfig.HostNetInfo[0].PointDataPort = appConfig.Mid360Config.HostNetInfo[0].PointDataPort = point_data_port.Value;
-
-            Instance = appConfig;
+            // 使用 AppConfigBuilder 从对象构建配置，应用可选参数覆盖，同时更新全局单例
+            Instance = AppConfigBuilder.FromConfig(appConfig)
+                .WithMasterSdk(masterSdk)
+                .WithWalkChangeThreshold(walkChangeThres)
+                .WithLidarIp(lidarIp)
+                .WithHostIp(hostIp)
+                .WithPointDataPort(point_data_port)
+                .BuildAndSetInstance();
         }
     }
 }

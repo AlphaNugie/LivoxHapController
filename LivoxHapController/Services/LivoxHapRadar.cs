@@ -8,6 +8,10 @@ using LivoxHapController.Enums;
 using LivoxHapController.Models;
 using LivoxHapController.Services.Parsers;
 
+#if NET45_OR_GREATER
+using System.IO;
+#endif
+
 namespace LivoxHapController.Services
 {
     /// <summary>
@@ -247,7 +251,7 @@ namespace LivoxHapController.Services
         #region 生命周期方法
 
         /// <summary>
-        /// 初始化雷达管理器
+        /// 初始化雷达管理器（从配置文件加载）
         /// 加载配置文件并初始化内部组件
         /// </summary>
         /// <param name="configFile">配置文件路径或文件名</param>
@@ -264,16 +268,62 @@ namespace LivoxHapController.Services
             if (string.IsNullOrWhiteSpace(configFile))
                 throw new ArgumentNullException(nameof(configFile), "配置文件路径不能为空");
 
-            string path = configFile.Contains(System.IO.Path.VolumeSeparatorChar)
-                ? configFile
-                : System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, configFile);
+            // 使用 AppConfigBuilder 从文件加载配置
+            var config = AppConfigBuilder.FromFile(configFile).Build();
 
-            if (!System.IO.File.Exists(path))
-                throw new ArgumentException("配置文件不存在: " + path, nameof(configFile));
+            // 调用共用的核心初始化逻辑
+            InitCore(config, coordTransParamSet);
+        }
 
-            // 加载配置
-            AppConfig.Init(path);
-            Config = AppConfig.Instance;
+        /// <summary>
+        /// 初始化雷达管理器（从AppConfig对象加载，支持可选参数覆盖）
+        /// 无需配置文件，直接传入AppConfig对象进行初始化；
+        /// 可选参数非null/非默认值时将覆盖appConfig中对应字段
+        /// </summary>
+        /// <param name="appConfig">应用程序配置对象，作为基础配置（为null时使用默认值）</param>
+        /// <param name="coordTransParamSet">坐标变换参数集（可选）</param>
+        /// <param name="masterSdk">是否启用主SDK（可选，覆盖appConfig.MasterSdk）</param>
+        /// <param name="walkChangeThres">步态切换阈值（可选，覆盖HAP/MID360的WalkChangedThreshold）</param>
+        /// <param name="lidarIp">LiDAR设备IP地址（可选，覆盖HAP/MID360的LidarIp）</param>
+        /// <param name="hostIp">主机IP地址（可选，覆盖HAP/MID360的HostIp）</param>
+        /// <param name="pointDataPort">点云数据端口号（可选，覆盖HAP/MID360的PointDataPort）</param>
+        public void Initialize(AppConfig appConfig, CoordTransParamSet
+             //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+             coordTransParamSet = null,
+            bool? masterSdk = null, double? walkChangeThres = null,
+            string lidarIp = "", string hostIp = "", int? pointDataPort = null)
+        {
+            // 使用 AppConfigBuilder 从对象构建配置，并应用可选参数覆盖
+            var config = AppConfigBuilder.FromConfig(appConfig)
+                .WithMasterSdk(masterSdk)
+                .WithWalkChangeThreshold(walkChangeThres)
+                .WithLidarIp(lidarIp)
+                .WithHostIp(hostIp)
+                .WithPointDataPort(pointDataPort)
+                .Build();
+
+            // 调用共用的核心初始化逻辑
+            InitCore(config, coordTransParamSet);
+        }
+
+        /// <summary>
+        /// 共用的核心初始化逻辑
+        /// 两个Initialize重载最终都调用此方法完成UDP通信器和设备发现服务的初始化
+        /// </summary>
+        /// <param name="config">已构建完成的AppConfig对象</param>
+        /// <param name="coordTransParamSet">坐标变换参数集（可选）</param>
+        private void InitCore(AppConfig config, CoordTransParamSet
+             //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+             coordTransParamSet)
+        {
+            // 保存配置
+            Config = config;
 
             // 保存坐标变换参数
             if (coordTransParamSet != null)
@@ -404,6 +454,7 @@ namespace LivoxHapController.Services
                 throw new InvalidOperationException("设备未连接，请先调用 Connect()");
 
             // 设置状态信息主机IP配置
+            // HAP (TX) 暂不支持
             _commander.SetStateInfoHostIp(hostIp, cmdPort, pushMsgPort);
 
             // 设置点云数据主机IP配置

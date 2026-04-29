@@ -64,3 +64,4 @@ nunit-*.xml
 /CrcTest.cs
 /crc_test.csx
 /LivoxHapController/.vs
+/.codebuddy/.rules
