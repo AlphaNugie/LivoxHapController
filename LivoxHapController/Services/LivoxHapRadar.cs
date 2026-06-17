@@ -557,6 +557,20 @@ namespace LivoxHapController.Services
             // 初始化UDP通信处理器
             _udpComm = new UdpCommunicator();
 
+            // 如果配置中存在LidarIp列表，设置来源IP过滤器
+            // 条件A：已初始化且LidarIp存在至少一个值 → 启用过滤，仅接受白名单内IP
+            // 条件A不满足 → 不过滤，接受所有来源
+            if (config?.HapConfig?.HostNetInfo?.Count > 0)
+            {
+                var lidarIps = config.HapConfig.HostNetInfo[0].LidarIp;
+                if (lidarIps != null && lidarIps.Count > 0)
+                {
+                    _udpComm.SetPointCloudSourceIpFilter(lidarIps);
+                    // 注册到进程内全局路由表，使其他实例可将误发的数据转发过来
+                    RadarRegistry.Register(lidarIps, _udpComm);
+                }
+            }
+
             // 初始化设备发现服务
             _discovery = new LidarDiscovery();
             _discovery.DeviceDiscovered += OnDeviceDiscovered;
@@ -1243,6 +1257,9 @@ namespace LivoxHapController.Services
 
             if (disposing)
             {
+                // 从进程内全局路由表中注销（在断开连接之前，确保不会再被转发）
+                RadarRegistry.Unregister(_udpComm);
+
                 // 释放托管资源
                 Disconnect();
 

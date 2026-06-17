@@ -24,10 +24,16 @@ namespace LivoxHapController.Services
 
 #if NET45_OR_GREATER
         /// <summary>
-        /// 命令端口的UDP客户端
-        /// internal访问级别，供LidarCommander复用以发送命令，确保命令和ACK共用同一端口
+        /// 点云/IMU 来源IP过滤器
+        /// 非空时只接受列表中IP发送的数据，空时不过滤接受所有来源
+        /// 由 LivoxHapRadar 初始化后从配置中的 LidarIp 填充
         /// </summary>
-        internal UdpClient CommandClient;
+        private HashSet<string>
+  //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+  _pointCloudSourceIpFilter;
 
         /// <summary>点云端口的UDP客户端</summary>
         private UdpClient _pointCloudClient;
@@ -263,6 +269,16 @@ namespace LivoxHapController.Services
                     IPEndPoint? remoteEP = null;
 #endif
                     byte[] data = _imuClient.Receive(ref remoteEP);
+
+                    // 来源IP过滤：如果设置了过滤器且来源不在白名单内
+                    if (remoteEP != null && !IsPointCloudSourceAccepted(remoteEP))
+                    {
+                        // 不在白名单 → 尝试转发到匹配的其他 UdpCommunicator 实例
+                        var target = RadarRegistry.FindTarget(remoteEP.Address.ToString(), this);
+                        target?.InjectImuData(data);
+                        continue;
+                    }
+
                     ImuDataReceived?.Invoke(this, data);
                 }
 
@@ -287,11 +303,88 @@ namespace LivoxHapController.Services
                     IPEndPoint? remoteEP = null;
 #endif
                     byte[] data = _pointCloudClient.Receive(ref remoteEP);
+
+                    // 来源IP过滤：如果设置了过滤器且来源不在白名单内
+                    if (remoteEP != null && !IsPointCloudSourceAccepted(remoteEP))
+                    {
+                        // 不在白名单 → 尝试转发到匹配的其他 UdpCommunicator 实例
+                        var target = RadarRegistry.FindTarget(remoteEP.Address.ToString(), this);
+                        target?.InjectPointCloudData(data);
+                        continue;
+                    }
+
                     PointCloudDataReceived?.Invoke(this, data);
                 }
 
                 Thread.Sleep(1); // 防止CPU占用过高
             }
+        }
+
+        #endregion
+
+        #region 来源IP过滤
+
+        /// <summary>
+        /// 设置点云/IMU 数据的来源IP白名单
+        /// 设置后仅接受列表中IP地址发送的点云和IMU数据
+        /// 传入空列表或null时取消过滤，接受所有来源
+        /// </summary>
+        /// <param name="lidarIps">允许的雷达IP地址列表，null或空列表=不过滤</param>
+        public void SetPointCloudSourceIpFilter(List<string> lidarIps)
+        {
+            if (lidarIps == null || lidarIps.Count == 0)
+            {
+                // 无过滤条件，接受所有来源
+                _pointCloudSourceIpFilter = null;
+            }
+            else
+            {
+                // 构建IP白名单（HashSet实现O(1)查找）
+                _pointCloudSourceIpFilter = new HashSet<string>(lidarIps, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        /// <summary>
+        /// 检查给定的远程端点IP是否被白名单接受
+        /// 过滤器为null时表示不过滤，接受所有来源
+        /// 例外：本机网卡IP来源的数据始终放行（保障跨实例转发数据流通）
+        /// </summary>
+        /// <param name="remoteEP">远程端点</param>
+        /// <returns>true=接受该来源的数据，false=应丢弃（但会在监听线程中尝试转发）</returns>
+        private bool IsPointCloudSourceAccepted(IPEndPoint remoteEP)
+        {
+            // 未设置过滤器 = 不过滤，接受所有来源
+            if (_pointCloudSourceIpFilter == null)
+                return true;
+
+            string ip = remoteEP.Address.ToString();
+
+            // 例外：本机网卡IP → 放行（保障跨实例转发数据流通）
+            if (RadarRegistry.IsLocalNicIp(ip))
+                return true;
+
+            // 在白名单内 = 接受
+            return _pointCloudSourceIpFilter.Contains(ip);
+        }
+
+        /// <summary>
+        /// 接收其他实例转发的点云数据（绕过自身过滤逻辑，直接触发事件）
+        /// 模拟接收线程收到了数据，下游 LivoxHapRadar.OnPointCloudDataReceived → MergePointCloudData 正常处理
+        /// </summary>
+        /// <param name="data">原始点云字节数据</param>
+        internal void InjectPointCloudData(byte[] data)
+        {
+            PointCloudDataReceived?.Invoke(this, data);
+        }
+
+        /// <summary>
+        /// 接收其他实例转发的IMU数据（绕过自身过滤逻辑，直接触发事件）
+        /// 模拟接收线程收到了数据，下游 LivoxHapRadar.OnImuDataReceived 正常处理
+        /// </summary>
+        /// <param name="data">原始IMU字节数据</param>
+        internal void InjectImuData(byte[] data)
+        {
+            ImuDataReceived?.Invoke(this, data);
         }
 
         #endregion

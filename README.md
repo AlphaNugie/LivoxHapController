@@ -226,6 +226,23 @@ radar.PointCloudDataReceived += (sender, rawData) =>
 
 订阅 `ImuDataReceived` 事件，或从点云数据包的 `ImuDataPoints` 中获取。每包包含 1 个 IMU 数据点（陀螺仪 3 轴 + 加速度计 3 轴）。
 
+#### 来源 IP 过滤与多实例数据路由
+
+当配置文件中 `lidar_ip` 字段包含至少一个有效 IP 地址时（条件 A），`LivoxHapRadar` 会在初始化后自动启用来源 IP 白名单过滤：点云和 IMU 端口仅接受白名单内雷达 IP 发送的数据。
+
+> **无需手动配置** — 过滤器在 `InitCore()` 中自动根据配置文件设置，`UdpCommunicator` 层拦截，对上层完全透明。
+
+**多实例数据路由与转发：**
+
+同一进程中可运行多个 `LivoxHapRadar` 实例，各自监听不同的端口。当扫描仪端配置错误导致数据误发到非目标端口时，`RadarRegistry`（进程内全局路由表）自动完成跨实例数据转发：
+
+1. `InitCore()` 将每个实例的 `lidarIps` 注册到 `RadarRegistry`（IP → UdpCommunicator 映射）
+2. 收到非白名单来源数据时，通过 `RadarRegistry.FindTarget()` 检索匹配的目标实例
+3. 找到后调用 `InjectPointCloudData()` / `InjectImuData()` 将数据注入目标实例，正常触发事件和数据处理
+4. `Dispose()` 时自动从注册表注销，防止悬垂引用
+
+**IP 过滤例外：** 本机网卡 IP 来源的数据始终放行（通过 `RadarRegistry.IsLocalNicIp()` 检测），保障跨实例转发数据的流通路径畅通。
+
 #### CSV 点云文件导入
 
 `CsvPointCloudImporter`（`Services/Parsers/`）支持将 Livox Viewer 导出的 CSV 点云文件转换为 `CartesianDataPoint` 列表。自动解析列名（支持 `X/Y/Z` 或 `Ori_x/Ori_y/Ori_z` 等关键字），第2行元数据行自动跳过。
@@ -748,7 +765,8 @@ LivoxHapController/
 │       ├── PointCloudParser.cs     # 点云数据解析
 │       └── ProtocolParser.cs       # 协议通用解析
 ├── Utilities/
-│   └── ObjectPool.cs           #   对象池
+│   ├── ObjectPool.cs           #   对象池
+│   └── RadarRegistry.cs        #   进程内多实例数据路由注册表
 └── Test/                       # 测试/快捷入口
     └── LivoxHapQuickStart.cs   #   快速启动类
 
