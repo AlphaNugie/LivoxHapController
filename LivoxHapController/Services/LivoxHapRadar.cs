@@ -90,6 +90,14 @@ namespace LivoxHapController.Services
         /// <summary>异步监控缓存的取消令牌源，按需创建</summary>
 #if NET9_0_OR_GREATER
         private readonly CancellationTokenSource? _monitorCts;
+
+        /// <summary>点云数据录制器（按需创建）</summary>
+        private PointCloudRecorder
+            //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+            _recorder;
 #elif NET45_OR_GREATER
         private readonly CancellationTokenSource _monitorCts;
 #endif
@@ -222,6 +230,25 @@ namespace LivoxHapController.Services
              CoordTransParamSet
         { get; set; }
 
+        /// <summary>
+        /// 点云数据录制器
+        /// 首次访问时自动创建，为 null 时录制功能不消耗任何资源
+        /// </summary>
+        public PointCloudRecorder Recorder
+        {
+            get
+            {
+#if NET45_OR_GREATER
+                if (_recorder == null)
+                    _recorder = new PointCloudRecorder();
+#elif NET9_0_OR_GREATER
+                _recorder ??= new PointCloudRecorder();
+#endif
+                return _recorder;
+            }
+        }
+        }
+        }
         #endregion
 
         #region 构造与析构
@@ -880,6 +907,9 @@ namespace LivoxHapController.Services
                 // 停止设备发现
                 _discovery?.Dispose();
 
+                // 停止录制和播放
+                _recorder?.Dispose();
+                _recorder = null;
                 // 停止UDP监听
                 _monitorCts?.Cancel();
                 _monitorCts?.Dispose();
@@ -890,5 +920,25 @@ namespace LivoxHapController.Services
         }
 
         #endregion
+
+        /// <summary>
+        /// 开始录制点云原始数据到 .pcr 文件
+        /// 便捷入口，等价于 Recorder.Start(filePath)
+        /// </summary>
+        /// <param name="filePath">输出文件路径（建议后缀 .pcr）</param>
+        public void StartRecording(string filePath)
+        {
+            Recorder.Start(filePath);
+        }
+
+        /// <summary>
+        /// 停止录制
+        /// 便捷入口，等价于 Recorder.Stop()
+        /// </summary>
+        public void StopRecording()
+        {
+            //_recorder?.Stop();
+            Recorder?.Stop();
+        }
     }
 }

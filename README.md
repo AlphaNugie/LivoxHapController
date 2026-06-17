@@ -37,7 +37,7 @@ WPF 桌面应用，覆盖 LiDAR 设备的完整操作流程：
 | 初始化与发现 | 加载配置文件或直接指定参数初始化、广播搜索 LiDAR 设备 |
 | 设备列表 | 展示已发现设备（含连接状态指示灯），支持连接/断开操作 |
 | 设备信息 | 显示设备基本信息，提供 7 项一键查询（固件类型/版本/序列号/MAC/工作状态/核心温度/状态码） |
-| 扫描控制 | 启动/停止扫描，实时显示扫描状态 |
+| 扫描控制 | 启动/停止扫描，实时显示扫描状态；录制点云原始数据到 .pcr 文件 |
 | 网络配置 | 手动或从配置文件应用主机 IP、各通道端口配置 |
 | 参数配置 | 点云数据类型、扫描模式、双发射、IMU 控制、安装姿态、FOV、盲区、加热控制、开机模式 |
 | 消息日志 | 实时显示 ACK 响应（含 Return Code 详细描述）、错误信息、推送消息 |
@@ -288,6 +288,46 @@ XyzPointCloudExporter.Save(points, stream, CultureInfo.InvariantCulture);
 ```csharp
 CartesianDataPoint.ToXyz(points, @"D:\output.xyz");
 ```
+
+#### 点云数据录制与模拟播放
+
+`PointCloudRecorder` 和 `PointCloudPlayer`（`Services/`）提供扫描仪原始数据的录制与离线回放能力。录制器将 UDP 原始数据包按接收顺序逐包写入 `.pcr` 二进制文件；播放器从文件读取并按 4包/ms 速率注入，数据流经与网络接收完全一致的 `InjectPointCloudData → PointCloudDataReceived → MergePointCloudData` 路径。
+
+**录制文件格式 (.pcr)：** 每包 `SegmentFlag(4B) + TimestampTicks(8B) + DataLength(4B) + RawData(N B)`，暂停恢复时写入新段标识（`0xFFFFFFFF`）+ 时间戳。
+
+##### 录制
+
+```csharp
+var radar = new LivoxHapRadar();
+// ... Initialize / Discover / Connect / StartScan ...
+
+// 开始录制
+radar.StartRecording(@"D:\recording.pcr");
+
+// 设置录制限制（可选）
+radar.Recorder.MaxDuration = TimeSpan.FromMinutes(5);   // 最长5分钟（排除暂停时间）
+radar.Recorder.Deadline = DateTime.Now.AddHours(1);     // 截止时间
+
+// 暂停/恢复（暂停期间不计入 MaxDuration）
+radar.Recorder.Pause();
+radar.Recorder.Resume();
+
+// 绑定暂停动作到外部 bool 属性（如 ViewModel.ShouldPause）
+radar.Recorder.BindPauseToProperty(viewModel, vm => vm.ShouldPause);
+
+// 停止录制
+radar.StopRecording();
+```
+
+> 录制器默认为 `null`，不录制时零开销。`OnPointCloudDataReceived` 中 `_recorder?.Record(data)` 在未创建录制器时为空操作。
+
+##### 事件参考
+
+| 事件 | 触发时机 |
+|------|---------|
+| `Recorder.MaxDurationReached` | 录制达到最大时长，自动停止 |
+| `Recorder.DeadlineReached` | 录制达到截止时间，自动停止 |
+| `Recorder.RecordingStopped` | 录制停止（手动或自动） |
 #### 设备推送消息
 
 雷达每 1 秒主动推送工作状态、参数信息等。订阅 `PushMessageReceived` 事件获取原始推送数据，订阅 `DeviceStatusUpdated` 事件获取解析后的查询/推送结果。
@@ -524,7 +564,7 @@ radar.Dispose();
 4. 选中设备，点击 **连接**
 5. 在配置面板中设置参数，在查询区域查询设备信息
 6. 点击 **启动扫描** 开始接收点云数据
-7. 日志区域实时显示 ACK 响应（含 Return Code 描述）和错误信息
+7. 点击 **开始录制**，在弹出的保存对话框中选择 .pcr 文件路径，开始录制原始点云数据；再次点击同一按钮（此时显示为"停止录制"）结束录制
 8. 点云区域显示数据包统计和摘要
 
 ---
@@ -669,6 +709,7 @@ LivoxHapController/
 │   ├── LidarDiscovery.cs       #   设备发现服务（广播+监听合并）
 │   ├── LivoxHapRadar.cs        #   上层管理类（支持文件初始化和对象初始化两种方式）
 │   ├── MathUtils.cs            #   数学工具（矩阵运算）
+│   ├── PointCloudRecorder.cs   #   点云数据录制器
 │   ├── SdkPacketBuilder.cs     #   协议包构建器
 │   ├── UdpCommunicator.cs      #   UDP 通信处理器（命令端口线程安全）
 │   ├── BufferManager.cs        #   缓冲区管理
