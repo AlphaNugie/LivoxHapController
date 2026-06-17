@@ -96,6 +96,16 @@ namespace LivoxHapController.Models.DataPoints
         }
 
         /// <summary>
+        /// 从 Livox Viewer 导出的 CSV 文件加载点云数据
+        /// 便捷入口，委托给 CsvPointCloudImporter.Load()
+        /// </summary>
+        /// <param name="filePath">CSV文件路径</param>
+        /// <returns>CartesianDataPoint 列表</returns>
+        public static List<CartesianDataPoint> FromCsv(string filePath)
+        {
+            return CsvPointCloudImporter.Load(filePath);
+        }
+
         /// 更新XYZ坐标
         /// </summary>
         /// <param name="x"></param>

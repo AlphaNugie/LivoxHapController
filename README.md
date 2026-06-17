@@ -226,6 +226,37 @@ radar.PointCloudDataReceived += (sender, rawData) =>
 
 订阅 `ImuDataReceived` 事件，或从点云数据包的 `ImuDataPoints` 中获取。每包包含 1 个 IMU 数据点（陀螺仪 3 轴 + 加速度计 3 轴）。
 
+#### CSV 点云文件导入
+
+`CsvPointCloudImporter`（`Services/Parsers/`）支持将 Livox Viewer 导出的 CSV 点云文件转换为 `CartesianDataPoint` 列表。自动解析列名（支持 `X/Y/Z` 或 `Ori_x/Ori_y/Ori_z` 等关键字），第2行元数据行自动跳过。
+
+**CSV 文件格式（Livox Viewer 导出标准格式）：**
+
+```
+第1行（列名）：Version,Handle,LiDAR Index,Rsvd,Error Code,Timestamp Type,Data Type,Timestamp,X,Y,Z,Reflectivity,Tag,Ori_x,Ori_y,Ori_z,Ori_radius,Ori_theta,Ori_phi,FrameCounter
+第2行（元数据）：5CWD24BL41000L1,-90.0,30.0,0.0,0.0,0.0,0.0,2,15,63326
+第3行起（数据）：205,3452816845,0,205,0xcdcdcdcdcdcdcdcd,205,205,-3617008641903833651,51.904003,26.719002,2.456000,96,64,31.590685,2.455997,-49.091331,0,0,0,0
+```
+
+> 解析器仅读取 Ori_x/Ori_y/Ori_z/Reflectivity/Tag 列（按列名关键字匹配），其他列（含脏数据列如 `0xcdcdcdcdcdcdcdcd`）不影响解析。
+
+**使用示例：**
+
+```csharp
+using LivoxHapController.Services.Parsers;
+
+// 从文件路径加载
+var points = CsvPointCloudImporter.Load(@"D:\temp\frame.csv");
+
+// 从流加载（支持指定区域性格式）
+var points = CsvPointCloudImporter.Load(stream, CultureInfo.InvariantCulture);
+```
+
+`CartesianDataPoint` 也提供便捷入口：
+
+```csharp
+var points = CartesianDataPoint.FromCsv(@"D:\temp\frame.csv");
+```
 #### 设备推送消息
 
 雷达每 1 秒主动推送工作状态、参数信息等。订阅 `PushMessageReceived` 事件获取原始推送数据，订阅 `DeviceStatusUpdated` 事件获取解析后的查询/推送结果。
