@@ -106,6 +106,19 @@ namespace LivoxHapController.Models.DataPoints
             return CsvPointCloudImporter.Load(filePath);
         }
 
+        /// <summary>
+        /// 将点云集合保存为 .xyz 文件
+        /// 每行格式：x y z（米→毫米取整，空格分隔）
+        /// 便捷入口，委托给 XyzPointCloudExporter.Save()
+        /// </summary>
+        /// <param name="points">点云数据集合</param>
+        /// <param name="filePath">输出文件路径（建议后缀 .xyz）</param>
+        public static void ToXyz(IEnumerable<CartesianDataPoint> points, string filePath)
+        {
+            XyzPointCloudExporter.Save(points, filePath);
+        }
+
+        /// <summary>
         /// 更新XYZ坐标
         /// </summary>
         /// <param name="x"></param>

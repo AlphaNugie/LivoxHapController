@@ -257,6 +257,37 @@ var points = CsvPointCloudImporter.Load(stream, CultureInfo.InvariantCulture);
 ```csharp
 var points = CartesianDataPoint.FromCsv(@"D:\temp\frame.csv");
 ```
+
+#### XYZ 点云文件导出
+
+`XyzPointCloudExporter`（`Services/Parsers/`）支持将 `CartesianDataPoint` 集合导出为 `.xyz` 格式点云文件，坐标自动从米转换为毫米并取整。
+
+**输出格式：** 每行 `x y z`（毫米取整，空格分隔），无列名行，纯数据：
+
+```
+51904 26719 2456
+51884 26712 1513
+51909 26814 567
+52303 27285 2446
+```
+
+**使用示例：**
+
+```csharp
+using LivoxHapController.Services.Parsers;
+
+// 保存到文件
+XyzPointCloudExporter.Save(points, @"D:\output.xyz");
+
+// 写入流
+XyzPointCloudExporter.Save(points, stream, CultureInfo.InvariantCulture);
+```
+
+`CartesianDataPoint` 也提供便捷入口：
+
+```csharp
+CartesianDataPoint.ToXyz(points, @"D:\output.xyz");
+```
 #### 设备推送消息
 
 雷达每 1 秒主动推送工作状态、参数信息等。订阅 `PushMessageReceived` 事件获取原始推送数据，订阅 `DeviceStatusUpdated` 事件获取解析后的查询/推送结果。
