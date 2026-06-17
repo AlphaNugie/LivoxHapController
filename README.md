@@ -373,6 +373,61 @@ radar.StopPlayback();
 | `Recorder.MaxDurationReached` | 录制达到最大时长，自动停止 |
 | `Recorder.DeadlineReached` | 录制达到截止时间，自动停止 |
 | `Recorder.RecordingStopped` | 录制停止（手动或自动） |
+
+#### 点云着色策略（Color Coding）
+
+Livox Viewer 支持以下三种着色模式，用于点云可视化渲染（来源：Livox-SDK2 Wiki）。
+
+##### 反射率着色（Reflectivity）
+
+根据点云的反射率值（0-255）映射为 RGB 颜色：
+
+- 反射率 0-30：蓝色 → 青色（R=0, G递增, B=255）
+- 反射率 30-90：青色 → 绿色（R=0, G=255, B递减）
+- 反射率 90-150：绿色 → 黄色（R递增, G=255, B=0）
+- 反射率 150-255：黄色 → 红色（R=255, G递减, B=0）
+
+##### 深度着色（Depth / Distance）
+
+根据点到雷达的距离在 HSV 色彩空间中线性插值：
+
+- 最近距离 → 红色（Hue=0.0）
+- 最远距离 → 蓝色（Hue=0.33）
+- 饱和度=1.0，明度=1.0 固定
+- 中间距离按线性比例插值
+
+##### 高度着色（Elevation）
+
+根据点云的高度（俯仰角）在 RGB 空间中线性插值：
+
+- Red 和 Blue 分量固定为 1.0
+- Green 分量从 1.0（最低处，品红色）线性递减至 0.0（最高处，黄色）
+
+详细着色算法参见通讯协议文档 `Livox-SDK-Communication-Protocol-HAP.md` 第 2.5 节。
+
+**代码使用示例：**
+
+```csharp
+using LivoxHapController.Utilities;
+
+// 反射率着色
+var (r, g, b) = ColorGradient.GetReflectivityColor(reflectivity: 128);
+
+// 深度着色（近距离=红，远距离=蓝）
+var (r, g, b) = ColorGradient.GetDepthColor(
+    distance: 50f, minDistance: 1f, maxDistance: 200f);
+
+// 高度着色（低处=品红，高处=黄）
+var (r, g, b) = ColorGradient.GetElevationColor(
+    elevation: 10f, minElevation: -20f, maxElevation: 50f);
+
+// 调用方可自行转为目标框架颜色类型：
+// WPF:      System.Windows.Media.Color.FromRgb(r, g, b)
+// WinForms: System.Drawing.Color.FromArgb(255, r, g, b)
+// Unity:    new UnityEngine.Color(r / 255f, g / 255f, b / 255f)
+```
+
+> `ColorGradient` 类不依赖任何 UI 框架，返回纯 `(byte R, byte G, byte B)` 元组，可适配 WPF、WinForms、Unity 等多种平台。
 #### 设备推送消息
 
 雷达每 1 秒主动推送工作状态、参数信息等。订阅 `PushMessageReceived` 事件获取原始推送数据，订阅 `DeviceStatusUpdated` 事件获取解析后的查询/推送结果。
