@@ -91,6 +91,8 @@ namespace LivoxHapController.Services
 #if NET9_0_OR_GREATER
         private readonly CancellationTokenSource? _monitorCts;
 
+        #region 录制与播放
+
         /// <summary>点云数据录制器（按需创建）</summary>
         private PointCloudRecorder
             //.net 9框架下使返回对象可为空
@@ -98,6 +100,16 @@ namespace LivoxHapController.Services
             ?
 #endif
             _recorder;
+
+        /// <summary>点云数据播放器（按需创建）</summary>
+        private PointCloudPlayer
+            //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+            _player;
+
+        #endregion
 #elif NET45_OR_GREATER
         private readonly CancellationTokenSource _monitorCts;
 #endif
@@ -246,6 +258,25 @@ namespace LivoxHapController.Services
 #endif
                 return _recorder;
             }
+        }
+
+        /// <summary>
+        /// 点云数据播放器
+        /// 首次访问时自动创建，为 null 时播放功能不消耗任何资源
+        /// </summary>
+        public PointCloudPlayer Player
+        {
+            get
+            {
+#if NET45_OR_GREATER
+                if (_player == null)
+                    _player = new PointCloudPlayer();
+#elif NET9_0_OR_GREATER
+                _player ??= new PointCloudPlayer();
+#endif
+                return _player;
+            }
+        }
         }
         }
         }
@@ -910,6 +941,9 @@ namespace LivoxHapController.Services
                 // 停止录制和播放
                 _recorder?.Dispose();
                 _recorder = null;
+                _player?.Dispose();
+                _player = null;
+
                 // 停止UDP监听
                 _monitorCts?.Cancel();
                 _monitorCts?.Dispose();
@@ -920,6 +954,8 @@ namespace LivoxHapController.Services
         }
 
         #endregion
+
+        #region 录制与播放便捷方法
 
         /// <summary>
         /// 开始录制点云原始数据到 .pcr 文件
@@ -940,5 +976,30 @@ namespace LivoxHapController.Services
             //_recorder?.Stop();
             Recorder?.Stop();
         }
+
+        /// <summary>
+        /// 开始模拟播放 .pcr 录制文件（可指定是否循环播放，默认不循环）
+        /// 数据通过 UdpCommunicator.InjectPointCloudData 注入，走与网络接收完全一致的流程
+        /// </summary>
+        /// <param name="filePath">.pcr 录制文件路径</param>
+        /// <param name="loop">是否循环播放</param>
+        public void StartPlayback(string filePath, bool loop = false)
+        {
+            if (_udpComm == null)
+                throw new InvalidOperationException("UdpCommunicator 未初始化，请先调用 Initialize() 和 Discover()");
+            Player.Start(filePath, _udpComm, loop);
+        }
+
+        /// <summary>
+        /// 停止播放
+        /// 便捷入口，等价于 Player.Stop()
+        /// </summary>
+        public void StopPlayback()
+        {
+            //_player?.Stop();
+            Player?.Stop();
+        }
+
+        #endregion
     }
 }

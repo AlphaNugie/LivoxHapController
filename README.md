@@ -321,6 +321,34 @@ radar.StopRecording();
 
 > 录制器默认为 `null`，不录制时零开销。`OnPointCloudDataReceived` 中 `_recorder?.Record(data)` 在未创建录制器时为空操作。
 
+##### 模拟播放
+
+```csharp
+// 单次播放（默认，播放完自动停止）
+radar.StartPlayback(@"D:\recording.pcr");
+
+// 循环播放（播放完从头开始）
+radar.StartPlayback(@"D:\recording.pcr", loop: true);
+
+// 也可通过属性动态切换循环模式
+radar.Player.Loop = true;
+
+// 调整播放速率（默认 4包/ms，可加/减速）
+radar.Player.PacketsPerMillisec = 2;   // 半速播放
+radar.Player.PacketsPerMillisec = 8;   // 双倍速播放
+
+// 暂停/恢复
+radar.Player.Pause();
+radar.Player.Resume();
+
+// 监听播放进度
+radar.Player.ProgressChanged += (s, e) =>
+    Console.WriteLine($"进度: {e.Progress:P1} ({e.CurrentIndex}/{e.TotalPackets})");
+
+// 停止播放
+radar.StopPlayback();
+```
+
 ##### 事件参考
 
 | 事件 | 触发时机 |
@@ -709,6 +737,7 @@ LivoxHapController/
 │   ├── LidarDiscovery.cs       #   设备发现服务（广播+监听合并）
 │   ├── LivoxHapRadar.cs        #   上层管理类（支持文件初始化和对象初始化两种方式）
 │   ├── MathUtils.cs            #   数学工具（矩阵运算）
+│   ├── PointCloudPlayer.cs     #   点云模拟播放器
 │   ├── PointCloudRecorder.cs   #   点云数据录制器
 │   ├── SdkPacketBuilder.cs     #   协议包构建器
 │   ├── UdpCommunicator.cs      #   UDP 通信处理器（命令端口线程安全）
