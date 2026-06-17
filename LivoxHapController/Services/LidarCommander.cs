@@ -34,6 +34,9 @@ namespace LivoxHapController.Services
         /// <summary>目标雷达的IP地址</summary>
         private readonly string _lidarIp;
 
+        /// <summary>本机IP地址</summary>
+        private string _hostIp;
+
         /// <summary>目标雷达的命令端口</summary>
         private readonly int _commandPort;
 
@@ -69,16 +72,22 @@ namespace LivoxHapController.Services
     /// 构造LiDAR命令控制器
     /// </remarks>
     /// <param name="lidarIp">目标雷达的IP地址</param>
+    /// <param name="hostIp">本机IP地址</param>
     /// <param name="commandPort">目标雷达的命令端口</param>
     /// <param name="udpComm">UDP通信处理器，复用其命令端口发送命令</param>
     /// <param name="maxRetries">发送失败时的最大重试次数（默认1）</param>
     /// <param name="retryInterval">重试间隔毫秒数（默认500）</param>
-    public class LidarCommander(string lidarIp, int commandPort, UdpCommunicator udpComm, int maxRetries = 1, int retryInterval = 500) : IDisposable
+    public class LidarCommander(string lidarIp, string hostIp, int commandPort, UdpCommunicator udpComm, int maxRetries = 1, int retryInterval = 500) : IDisposable
     {
         #region 私有字段
 
         /// <summary>目标雷达的IP地址</summary>
         private readonly string _lidarIp = lidarIp;
+
+        /// <summary>
+        /// 本机IP地址
+        /// </summary>
+        private string _hostIp = hostIp;
 
         /// <summary>目标雷达的命令端口</summary>
         private readonly int _commandPort = commandPort;
@@ -104,13 +113,15 @@ namespace LivoxHapController.Services
         /// 构造LiDAR命令控制器
         /// </summary>
         /// <param name="lidarIp">目标雷达的IP地址</param>
+        /// <param name="hostIp">本机IP地址</param>
         /// <param name="commandPort">目标雷达的命令端口</param>
         /// <param name="udpComm">UDP通信处理器，复用其命令端口发送命令</param>
         /// <param name="maxRetries">发送失败时的最大重试次数（默认1）</param>
         /// <param name="retryInterval">重试间隔毫秒数（默认500）</param>
-        public LidarCommander(string lidarIp, int commandPort, UdpCommunicator udpComm, int maxRetries = 1, int retryInterval = 500)
+        public LidarCommander(string lidarIp, string hostIp, int commandPort, UdpCommunicator udpComm, int maxRetries = 1, int retryInterval = 500)
         {
             _lidarIp = lidarIp;
+            _hostIp = hostIp;
             _commandPort = commandPort;
             _udpComm = udpComm;
             _maxRetries = maxRetries;
@@ -171,24 +182,44 @@ namespace LivoxHapController.Services
             IPEndPoint target = new(IPAddress.Parse(_lidarIp), _commandPort);
 #endif
 
+            // 记录UdpCommunicator.CommandClient的初始状态，如果为null则需要临时创建，发送完成后再清理
+            bool wasNull = _udpComm.CommandClient == null;
+            int packetLength = 0;
             for (int attempt = 0; attempt <= _maxRetries; attempt++)
             {
                 try
                 {
+                    // 如果构造时传入的UdpCommunicator.CommandClient为null，临时创建一个UdpClient用于发送
+                    if (_udpComm.CommandClient == null)
+                    {
+                        // 如果_hostIp为空或全空白，尝试自动获取与雷达IP同网段的本机IP
+                        if (string.IsNullOrWhiteSpace(_hostIp))
+                            _hostIp = NetworkUtils.GetHostIpInSameSegment(_lidarIp);
+                        _udpComm.CommandClient = UdpCommunicator.CreateUdpClient(_hostIp, _commandPort);
+                    }
                     // 通过UdpCommunicator的命令端口发送，确保雷达ACK回到同一端口
                     _udpComm.SendCommand(packet, target);
-                    return packet.Length;
+                    //return packet.Length;
+                    packetLength = packet.Length;
+                    goto END; // 成功发送后跳出重试循环
                 }
                 catch (Exception)
                 {
                     if (attempt < _maxRetries)
-                        System.Threading.Thread.Sleep(_retryInterval);
+                        Thread.Sleep(_retryInterval);
                     else
+                    {
+                        if (wasNull) _udpComm.CleanupCommandClient(); // 清理临时创建的CommandClient
                         throw;
+                    }
                 }
             }
 
-            return 0;
+        END:
+            // 如果之前CommandClient为null，说明是临时创建的，发送完成后需要清理
+            if (wasNull) _udpComm.CleanupCommandClient();
+            return packetLength;
+            //return 0;
         }
 
         #endregion
