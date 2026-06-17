@@ -28,8 +28,14 @@ namespace LivoxHapController.Services
         private bool _isRunning;
 
         /// <summary>
+        /// 实际绑定的发现端口
+        /// 当默认端口56001被占用时，会自动尝试随机端口，此字段记录最终绑定的端口号
+        /// </summary>
+        private int _boundPort;
+
+        /// <summary>
         /// 统一的UDP客户端，同时用于发送广播和接收响应
-        /// 绑定56001端口，发送广播时源端口为56001，扫描仪回复也发往56001
+        /// 绑定56001端口（或自动分配的随机端口），发送广播时源端口即为此端口，扫描仪回复也发往此端口
         /// </summary>
         private UdpClient
             //.net 9框架下使返回对象可为空
@@ -48,6 +54,14 @@ namespace LivoxHapController.Services
             ?
 #endif
         _workerThread;
+
+        /// <summary>随机数生成器，用于端口被占用时生成随机端口号</summary>
+        private static readonly Random _random =
+#if NET45_OR_GREATER
+            new Random();
+#elif NET9_0_OR_GREATER
+            new();
+#endif
 
         #endregion
 
@@ -99,21 +113,63 @@ namespace LivoxHapController.Services
         /// <summary>
         /// 启动设备发现
         /// 绑定56001端口，开始广播搜索并接收设备响应
+        /// 当默认端口被占用时，自动尝试随机端口（56002~65535），最多尝试5个端口
         /// </summary>
         /// <param name="hostIp">本机IP地址（用于绑定监听端口），为空则绑定所有接口</param>
+        /// <exception cref="InvalidOperationException">连续5个端口均被占用时抛出</exception>
         public void Start(string hostIp = "")
         {
             if (_isRunning) return;
 
-            _isRunning = true;
+            // 尝试绑定默认端口56001，失败时自动切换随机端口
+            // 最多尝试5个端口（1个默认 + 4个随机），全部失败才上报
+            const int maxAttempts = 5;
+            var attemptedPorts = new List<int>();
 
-            // 创建统一的UDP客户端，绑定56001端口
-            // 该客户端既用于发送广播（源端口56001），也用于接收扫描仪的回复（目标端口56001）
-            if (string.IsNullOrWhiteSpace(hostIp))
-                _udpClient = new UdpClient(SdkPacketBuilder.DetectionListenPort);
-            else
-                _udpClient = new UdpClient(
-                    new IPEndPoint(IPAddress.Parse(hostIp), SdkPacketBuilder.DetectionListenPort));
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                // 第一次尝试默认端口，后续尝试随机端口
+                int port = (attempt == 0)
+                    ? SdkPacketBuilder.DetectionListenPort
+                    : _random.Next(SdkPacketBuilder.DetectionListenPort + 1, 65536);
+
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(hostIp))
+                        _udpClient = new UdpClient(port);
+                    else
+                        _udpClient = new UdpClient(
+                            new IPEndPoint(IPAddress.Parse(hostIp), port));
+
+                    // 绑定成功，记录实际端口号
+                    _boundPort = port;
+                    attemptedPorts.Add(port);
+                    break;
+                }
+                catch (SocketException)
+                {
+                    // 端口被占用，记录并继续尝试下一个端口
+                    attemptedPorts.Add(port);
+
+                    if (attempt == maxAttempts - 1)
+                    {
+                        // 已尝试5个端口均失败，上报错误
+                        throw new InvalidOperationException(
+                            string.Format("发现端口全部被占用（已尝试：{0}），请检查是否有其他程序或Livox实例正在运行",
+                                string.Join(", ", attemptedPorts)));
+                    }
+                    // 否则继续循环尝试下一个随机端口
+                }
+                //catch (Exception)
+                //{
+                //    throw new InvalidOperationException("发生未知错误，设备发现端口初始化失败");
+                //}
+            }
+
+            if (_udpClient == null)
+                throw new InvalidOperationException("无法初始化UDP客户端，设备发现服务启动失败");
+            
+            _isRunning = true;
 
             // 启用广播发送
             _udpClient.EnableBroadcast = true;
