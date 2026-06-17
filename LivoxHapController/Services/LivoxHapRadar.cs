@@ -655,6 +655,42 @@ namespace LivoxHapController.Services
         }
 
         /// <summary>
+        /// 通过设备ip连接到已发现的设备（假如给的设备ip为空，则使用配置中 HostNetInfo 的第一个 LidarIp）
+        /// </summary>
+        /// <param name="ipAddress">设备ip地址，假如为空则使用配置中 HostNetInfo 的第一个 LidarIp</param>
+        /// <returns>是否连接成功</returns>
+        public bool ConnectByDeviceIp(string
+            //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+  ipAddress = null)
+        {
+#if NET45_OR_GREATER
+            ipAddress = ipAddress ?? Config?.HapConfig?.HostNetInfo?.FirstOrDefault()?.LidarIp.FirstOrDefault();
+#elif NET9_0_OR_GREATER
+            ipAddress ??= Config?.HapConfig?.HostNetInfo?.FirstOrDefault()?.LidarIp.FirstOrDefault();
+#endif
+            if (string.IsNullOrWhiteSpace(ipAddress))
+                throw new ArgumentNullException(nameof(ipAddress), "提供的IP地址为空而且找不到已配置的设备ip");
+
+            LidarDeviceInfo
+            //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+             device;
+            lock (_syncRoot)
+            {
+                device = _discoveredDevices.FirstOrDefault(d => d.LidarIpString.Equals(ipAddress.Trim()));
+            }
+
+            if (device == null) return false;
+            Connect(device);
+            return true;
+        }
+
+        /// <summary>
         /// 连接到第一个已发现的设备
         /// </summary>
         /// <returns>是否连接成功</returns>
