@@ -212,6 +212,12 @@
                             <Ellipse x:Name="ScanIndicator" Style="{StaticResource StatusIndicator}"/>
                             <TextBlock x:Name="TxtScanStatus" Text="未扫描" VerticalAlignment="Center" FontSize="11" Foreground="Gray"/>
                         </WrapPanel>
+                        <!-- 录制控制 -->
+                        <WrapPanel Margin="0,4,0,4">
+                            <Button x:Name="BtnRecord" Content="开始录制" Click="BtnRecord_Click" Style="{StaticResource ActionButton}" Padding="12,4"/>
+                            <Ellipse x:Name="RecordIndicator" Style="{StaticResource StatusIndicator}"/>
+                            <TextBlock x:Name="TxtRecordStatus" Text="未录制" VerticalAlignment="Center" FontSize="11" Foreground="Gray"/>
+                        </WrapPanel>
 
                         <Separator Margin="0,4"/>
 

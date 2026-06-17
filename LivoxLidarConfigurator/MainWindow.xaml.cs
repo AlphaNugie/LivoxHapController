@@ -35,6 +35,9 @@ namespace LivoxLidarConfigurator
         /// <summary>点云数据接收总字节数</summary>
         private long _pclTotalBytes;
 
+        /// <summary>是否正在录制点云数据（用于切换按钮文字和行为）</summary>
+        private bool _isRecording;
+
         /// <summary>是否正在发现设备</summary>
         private bool _isDiscovering;
 
@@ -355,6 +358,94 @@ namespace LivoxLidarConfigurator
             {
                 LogError($"停止扫描失败: {ex.Message}");
             }
+        }
+
+        #endregion
+
+        #region 录制控制
+
+        /// <summary>
+        /// 录制按钮点击事件处理
+        /// 首次点击：弹出保存文件对话框选择 .pcr 文件路径，开始录制点云数据
+        /// 再次点击：停止录制，按钮恢复为"开始录制"
+        /// 录制功能依赖于 _radar.Recorder（PointCloudRecorder），由 LivoxHapRadar 内部自动在收到点云时调用 Record()
+        /// </summary>
+        private void BtnRecord_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_radar == null)
+                {
+                    LogError("请先初始化雷达管理器");
+                    return;
+                }
+
+                if (!_isRecording)
+                {
+                    // 开始录制：弹出保存文件对话框
+                    var dlg = new SaveFileDialog
+                    {
+                        Filter = "PCR点云录制文件|*.pcr|所有文件|*.*",
+                        Title = "选择录制文件保存路径",
+                        DefaultExt = ".pcr",
+                        FileName = $"LivoxHap_{DateTime.Now:yyyyMMdd_HHmmss}.pcr"
+                    };
+
+                    if (dlg.ShowDialog() == true)
+                    {
+                        _radar.StartRecording(dlg.FileName);
+                        _isRecording = true;
+
+                        // 更新UI：按钮文字、指示灯、状态文本
+                        BtnRecord.Content = "停止录制";
+                        BtnRecord.Style = (Style)FindResource("DangerButton");
+                        RecordIndicator.Fill = System.Windows.Media.Brushes.Red;
+                        TxtRecordStatus.Text = $"录制中: {System.IO.Path.GetFileName(dlg.FileName)}";
+                        TxtRecordStatus.Foreground = System.Windows.Media.Brushes.Red;
+
+                        Log($"开始录制点云数据: {dlg.FileName}");
+                    }
+                }
+                else
+                {
+                    // 停止录制
+                    _radar.StopRecording();
+                    _isRecording = false;
+
+                    // 恢复UI：按钮文字、指示灯、状态文本
+                    BtnRecord.Content = "开始录制";
+                    BtnRecord.Style = (Style)FindResource("ActionButton");
+                    RecordIndicator.Fill = System.Windows.Media.Brushes.Gray;
+                    TxtRecordStatus.Text = "未录制";
+                    TxtRecordStatus.Foreground = System.Windows.Media.Brushes.Gray;
+
+                    Log($"停止录制点云数据（共录制 {_radar.Recorder.TotalRecordedPackets} 包）");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"录制操作失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 重置录制状态（断开连接或停止扫描时调用）
+        /// 如果正在录制则先停止，然后恢复UI为初始状态
+        /// </summary>
+        private void ResetRecordingState()
+        {
+            if (_isRecording)
+            {
+                _radar?.StopRecording();
+                _isRecording = false;
+            }
+
+            // 恢复录制UI为初始状态
+            BtnRecord.Content = "开始录制";
+            BtnRecord.Style = (Style)FindResource("ActionButton");
+            RecordIndicator.Fill = System.Windows.Media.Brushes.Gray;
+            TxtRecordStatus.Text = "未录制";
+            TxtRecordStatus.Foreground = System.Windows.Media.Brushes.Gray;
         }
 
         #endregion
