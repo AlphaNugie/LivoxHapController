@@ -117,15 +117,17 @@
         public void UpdateZOffset(double z) { Z = z; }
 
         /// <summary>
-        /// 更新设备俯仰角
+        /// 更新设备俯仰角（单位：度），设备俯仰运动引起的额外旋转，默认为0
+        /// <para/>一般设备俯仰向上为正，与扫描仪相反
         /// </summary>
         /// <param name="devicePitch">设备自身的俯仰角（单位：度）</param>
-        public void UpdateDevicePitch(double devicePitch) { DevicePitch = devicePitch; }
+        public void UpdateDevicePitch(double devicePitch) { DevicePitch = 0 - devicePitch; }
 
         /// <summary>
-        /// 更新设备回转角
+        /// 更新设备回转角（单位：度），设备回转运动引起的额外旋转，默认为0
+        /// <para/>一般设备回转向右为正，与扫描仪相反
         /// </summary>
         /// <param name="deviceYaw">设备自身的回转角（单位：度）</param>
-        public void UpdateDeviceYaw(double deviceYaw) { DeviceYaw = deviceYaw; }
+        public void UpdateDeviceYaw(double deviceYaw) { DeviceYaw = 0 - deviceYaw; }
     }
 }
