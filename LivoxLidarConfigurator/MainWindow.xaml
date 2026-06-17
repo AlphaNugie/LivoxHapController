@@ -314,10 +314,19 @@
                         <Separator Margin="0,8"/>
 
                         <!-- FOV 配置 -->
-                        <TextBlock Text="FOV 视场配置" Style="{StaticResource GroupHeader}"/>
+                        <TextBlock Text="FOV0 视场配置" Style="{StaticResource GroupHeader}"/>
                         <Grid Margin="0,0,0,4">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition Width="*"/><ColumnDefinition Width="90"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/>
+                                <RowDefinition/>
+                                <RowDefinition/>
+                            </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Yaw起始(0.01°)：" Style="{StaticResource FieldLabel}"/>
                             <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtFov0YawStart" Text="0" Style="{StaticResource FieldInput}"/>
@@ -329,10 +338,35 @@
                             <TextBlock Grid.Row="1" Grid.Column="2" Text="Pitch结束：" Style="{StaticResource FieldLabel}"/>
                             <TextBox Grid.Row="1" Grid.Column="3" x:Name="TxtFov0PitchStop" Text="5500" Style="{StaticResource FieldInput}"/>
                         </Grid>
-                        <WrapPanel>
-                            <Button Content="设置FOV0" Click="BtnSetFov0_Click" Style="{StaticResource ActionButton}"/>
-                            <Button Content="设置FOV1" Click="BtnSetFov1_Click" Style="{StaticResource ActionButton}"/>
-                        </WrapPanel>
+                        <Button Content="设置FOV0" Click="BtnSetFov0_Click" Style="{StaticResource ActionButton}" HorizontalAlignment="Left"/>
+
+                        <Separator Margin="0,4"/>
+
+                        <TextBlock Text="FOV1 视场配置" Style="{StaticResource GroupHeader}"/>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="90"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition/>
+                                <RowDefinition/>
+                                <RowDefinition/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Yaw起始(0.01°)：" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtFov1YawStart" Text="0" Style="{StaticResource FieldInput}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Yaw结束：" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Grid.Row="0" Grid.Column="3" x:Name="TxtFov1YawStop" Text="36000" Style="{StaticResource FieldInput}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Pitch起始：" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtFov1PitchStart" Text="-700" Style="{StaticResource FieldInput}"/>
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="Pitch结束：" Style="{StaticResource FieldLabel}"/>
+                            <TextBox Grid.Row="1" Grid.Column="3" x:Name="TxtFov1PitchStop" Text="5500" Style="{StaticResource FieldInput}"/>
+                        </Grid>
+                        <Button Content="设置FOV1" Click="BtnSetFov1_Click" Style="{StaticResource ActionButton}" HorizontalAlignment="Left"/>
 
                         <Separator Margin="0,8"/>
 

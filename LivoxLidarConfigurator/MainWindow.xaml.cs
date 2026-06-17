@@ -100,7 +100,7 @@ namespace LivoxLidarConfigurator
 
         /// <summary>
         /// 直接初始化雷达管理器（不依赖配置文件）
-        /// 使用当前主机IP文本框的值和默认端口创建AppConfig进行初始化
+        /// 使用当前主机IP文本框的值和配置面板中的端口参数，通过 AppConfigBuilder 创建配置进行初始化
         /// </summary>
         private void BtnInitDirect_Click(object sender, RoutedEventArgs e)
         {
@@ -113,16 +113,42 @@ namespace LivoxLidarConfigurator
                     return;
                 }
 
+                // 验证并解析端口号（仅当用户已输入非空值时才覆盖默认配置）
+                int? cmdPort = TryParsePort(TxtCfgCmdPort.Text, "命令端口");
+                int? pointPort = TryParsePort(TxtCfgPointPort.Text, "点云端口");
+                int? imuPort = TryParsePort(TxtCfgImuPort.Text, "IMU端口");
+                int? pushPort = TryParsePort(TxtCfgPushPort.Text, "推送端口");
+                // 如果任一端口验证失败，终止初始化
+                if (cmdPort == null || pointPort == null || imuPort == null || pushPort == null)
+                    return;
+
                 _radar = new LivoxHapRadar();
 
                 // 订阅事件
                 SubscribeRadarEvents();
 
-                // 使用 AppConfig 对象直接初始化，覆盖主机IP
-                _radar.Initialize(
-                    appConfig: new AppConfig(),
-                    hostIp: hostIp
-                );
+                // 使用 AppConfigBuilder 构建配置，应用用户在配置面板中输入的端口参数
+                var config = AppConfigBuilder.FromConfig(new AppConfig())
+                    .WithHostIp(hostIp)
+                    .WithPointDataPort(pointPort)
+                    .Build();
+
+                // 手动覆盖 AppConfigBuilder 尚未支持的端口字段（命令端口、IMU端口、推送端口）
+                if (config.HapConfig.HostNetInfo.Count > 0)
+                {
+                    config.HapConfig.HostNetInfo[0].CmdDataPort = cmdPort.Value;
+                    config.HapConfig.HostNetInfo[0].ImuDataPort = imuPort.Value;
+                    config.HapConfig.HostNetInfo[0].PushMsgPort = pushPort.Value;
+                }
+                if (config.Mid360Config.HostNetInfo.Count > 0)
+                {
+                    config.Mid360Config.HostNetInfo[0].CmdDataPort = cmdPort.Value;
+                    config.Mid360Config.HostNetInfo[0].ImuDataPort = imuPort.Value;
+                    config.Mid360Config.HostNetInfo[0].PushMsgPort = pushPort.Value;
+                }
+
+                // 使用构建好的 AppConfig 对象直接初始化
+                _radar.Initialize(appConfig: config);
                 Log($"直接初始化成功，主机IP: {hostIp}");
 
                 // 更新UI状态
@@ -161,6 +187,9 @@ namespace LivoxLidarConfigurator
             BtnInitDirect.IsEnabled = false;
             BtnDiscover.IsEnabled = true;
             TxtConfigFile.IsEnabled = false;
+
+            // 从当前配置中读取端口值回填到网络配置面板，使UI与实际配置一致
+            FillNetworkConfigFromRadar();
         }
 
         /// <summary>
@@ -237,6 +266,9 @@ namespace LivoxLidarConfigurator
                 _radar.Connect(item.DeviceInfo);
                 item.IsConnected = true;
 
+                // 通知UI更新连接状态指示灯颜色
+                item.NotifyStateChanged();
+
                 // 更新UI
                 UpdateConnectionState(true);
                 PnlDeviceInfo.IsEnabled = true;
@@ -251,6 +283,7 @@ namespace LivoxLidarConfigurator
 
         /// <summary>
         /// 断开当前设备连接
+        /// 断开后允许重新初始化，支持完整生命周期管理
         /// </summary>
         private void BtnDisconnect_Click(object sender, RoutedEventArgs e)
         {
@@ -259,13 +292,26 @@ namespace LivoxLidarConfigurator
                 if (_radar == null) return;
 
                 _radar.Disconnect();
-                // 更新所有设备的连接状态
+                // 更新所有设备的连接状态，并通知UI刷新指示灯颜色
                 foreach (var d in _devices)
+                {
                     d.IsConnected = false;
+                    d.NotifyStateChanged();
+                }
 
                 UpdateConnectionState(false);
                 PnlConfig.IsEnabled = false;
-                Log("已断开设备连接");
+
+                // 断开连接后重置录制状态
+                ResetRecordingState();
+
+                // 断开连接后重新允许初始化，支持重复初始化场景
+                BtnInitialize.IsEnabled = true;
+                BtnInitDirect.IsEnabled = true;
+                BtnDiscover.IsEnabled = false;
+                TxtConfigFile.IsEnabled = true;
+
+                Log("已断开设备连接，可重新初始化");
             }
             catch (Exception ex)
             {
@@ -341,6 +387,7 @@ namespace LivoxLidarConfigurator
 
         /// <summary>
         /// 停止扫描（进入休眠模式）
+        /// 停止时同步清零点云统计数据并刷新UI
         /// </summary>
         private void BtnStopScan_Click(object sender, RoutedEventArgs e)
         {
@@ -352,6 +399,12 @@ namespace LivoxLidarConfigurator
                 ScanIndicator.Fill = Brushes.Gray;
                 TxtScanStatus.Text = "未扫描";
                 TxtScanStatus.Foreground = Brushes.Gray;
+
+                // 清零点云统计数据并刷新UI显示
+                _pclPacketCount = 0;
+                _pclTotalBytes = 0;
+                TxtPclStats.Text = "";
+
                 Log("扫描已停止");
             }
             catch (Exception ex)
@@ -454,20 +507,27 @@ namespace LivoxLidarConfigurator
 
         /// <summary>
         /// 手动应用网络配置
+        /// 带输入验证：检查IP地址格式和端口范围
         /// </summary>
         private void BtnApplyNetwork_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 EnsureRadarConnected();
-                _radar!.Configure(
-                    TxtCfgHostIp.Text.Trim(),
-                    ushort.Parse(TxtCfgCmdPort.Text.Trim()),
-                    ushort.Parse(TxtCfgPointPort.Text.Trim()),
-                    ushort.Parse(TxtCfgImuPort.Text.Trim()),
-                    ushort.Parse(TxtCfgPushPort.Text.Trim())
-                );
-                Log($"网络配置已发送: HostIp={TxtCfgHostIp.Text.Trim()}");
+
+                // 验证主机IP地址格式
+                string hostIp = TxtCfgHostIp.Text.Trim();
+                if (!ValidateIpAddress(hostIp, "主机IP"))
+                    return;
+
+                // 验证并解析各端口号
+                if (!ValidateAndParseUshort(TxtCfgCmdPort.Text.Trim(), "命令端口", out ushort cmdPort)) return;
+                if (!ValidateAndParseUshort(TxtCfgPointPort.Text.Trim(), "点云端口", out ushort pointPort)) return;
+                if (!ValidateAndParseUshort(TxtCfgImuPort.Text.Trim(), "IMU端口", out ushort imuPort)) return;
+                if (!ValidateAndParseUshort(TxtCfgPushPort.Text.Trim(), "推送端口", out ushort pushPort)) return;
+
+                _radar!.Configure(hostIp, cmdPort, pointPort, imuPort, pushPort);
+                Log($"网络配置已发送: HostIp={hostIp}");
             }
             catch (Exception ex)
             {
@@ -594,21 +654,24 @@ namespace LivoxLidarConfigurator
 
         /// <summary>
         /// 设置安装姿态（Roll/Pitch/Yaw角度 + X/Y/Z偏移）
+        /// 带输入验证：检查角度和偏移值是否为合法数值
         /// </summary>
         private void BtnSetAttitude_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 EnsureRadarConnected();
-                _radar!.SetInstallAttitude(
-                    float.Parse(TxtAttRoll.Text.Trim()),
-                    float.Parse(TxtAttPitch.Text.Trim()),
-                    float.Parse(TxtAttYaw.Text.Trim()),
-                    int.Parse(TxtAttX.Text.Trim()),
-                    int.Parse(TxtAttY.Text.Trim()),
-                    int.Parse(TxtAttZ.Text.Trim())
-                );
-                Log($"已设置安装姿态: R={TxtAttRoll.Text}, P={TxtAttPitch.Text}, Y={TxtAttYaw.Text}, X={TxtAttX.Text}, Y={TxtAttY.Text}, Z={TxtAttZ.Text}");
+
+                // 验证并解析各安装姿态参数
+                if (!ValidateAndParseFloat(TxtAttRoll.Text.Trim(), "Roll角度", out float roll)) return;
+                if (!ValidateAndParseFloat(TxtAttPitch.Text.Trim(), "Pitch角度", out float pitch)) return;
+                if (!ValidateAndParseFloat(TxtAttYaw.Text.Trim(), "Yaw角度", out float yaw)) return;
+                if (!ValidateAndParseInt(TxtAttX.Text.Trim(), "X偏移", out int x)) return;
+                if (!ValidateAndParseInt(TxtAttY.Text.Trim(), "Y偏移", out int y)) return;
+                if (!ValidateAndParseInt(TxtAttZ.Text.Trim(), "Z偏移", out int z)) return;
+
+                _radar!.SetInstallAttitude(roll, pitch, yaw, x, y, z);
+                Log($"已设置安装姿态: R={roll}, P={pitch}, Y={yaw}, X={x}, Y={y}, Z={z}");
             }
             catch (Exception ex)
             {
@@ -622,19 +685,22 @@ namespace LivoxLidarConfigurator
 
         /// <summary>
         /// 设置FOV配置0
+        /// 带输入验证：检查各角度值是否为合法整数
         /// </summary>
         private void BtnSetFov0_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 EnsureRadarConnected();
-                _radar!.SetFovConfig0(
-                    int.Parse(TxtFov0YawStart.Text.Trim()),
-                    int.Parse(TxtFov0YawStop.Text.Trim()),
-                    int.Parse(TxtFov0PitchStart.Text.Trim()),
-                    int.Parse(TxtFov0PitchStop.Text.Trim())
-                );
-                Log("已设置FOV配置0");
+
+                // 验证并解析FOV0各角度参数
+                if (!ValidateAndParseInt(TxtFov0YawStart.Text.Trim(), "FOV0 Yaw起始", out int yawStart)) return;
+                if (!ValidateAndParseInt(TxtFov0YawStop.Text.Trim(), "FOV0 Yaw结束", out int yawStop)) return;
+                if (!ValidateAndParseInt(TxtFov0PitchStart.Text.Trim(), "FOV0 Pitch起始", out int pitchStart)) return;
+                if (!ValidateAndParseInt(TxtFov0PitchStop.Text.Trim(), "FOV0 Pitch结束", out int pitchStop)) return;
+
+                _radar!.SetFovConfig0(yawStart, yawStop, pitchStart, pitchStop);
+                Log($"已设置FOV配置0: Yaw=[{yawStart},{yawStop}] Pitch=[{pitchStart},{pitchStop}]");
             }
             catch (Exception ex)
             {
@@ -644,19 +710,22 @@ namespace LivoxLidarConfigurator
 
         /// <summary>
         /// 设置FOV配置1
+        /// 使用独立的FOV1输入框，带输入验证
         /// </summary>
         private void BtnSetFov1_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 EnsureRadarConnected();
-                _radar!.SetFovConfig1(
-                    int.Parse(TxtFov0YawStart.Text.Trim()),
-                    int.Parse(TxtFov0YawStop.Text.Trim()),
-                    int.Parse(TxtFov0PitchStart.Text.Trim()),
-                    int.Parse(TxtFov0PitchStop.Text.Trim())
-                );
-                Log("已设置FOV配置1");
+
+                // 验证并解析FOV1各角度参数（使用FOV1专属输入框）
+                if (!ValidateAndParseInt(TxtFov1YawStart.Text.Trim(), "FOV1 Yaw起始", out int yawStart)) return;
+                if (!ValidateAndParseInt(TxtFov1YawStop.Text.Trim(), "FOV1 Yaw结束", out int yawStop)) return;
+                if (!ValidateAndParseInt(TxtFov1PitchStart.Text.Trim(), "FOV1 Pitch起始", out int pitchStart)) return;
+                if (!ValidateAndParseInt(TxtFov1PitchStop.Text.Trim(), "FOV1 Pitch结束", out int pitchStop)) return;
+
+                _radar!.SetFovConfig1(yawStart, yawStop, pitchStart, pitchStop);
+                Log($"已设置FOV配置1: Yaw=[{yawStart},{yawStop}] Pitch=[{pitchStart},{pitchStop}]");
             }
             catch (Exception ex)
             {
@@ -670,13 +739,24 @@ namespace LivoxLidarConfigurator
 
         /// <summary>
         /// 设置盲区距离
+        /// 带输入验证：检查盲区值是否为合法数值且在50-200范围内
         /// </summary>
         private void BtnSetBlindSpot_Click(object sender, RoutedEventArgs e)
         {
             try
             {
                 EnsureRadarConnected();
-                uint val = uint.Parse(TxtBlindSpot.Text.Trim());
+
+                // 验证盲区距离为合法数值
+                if (!ValidateAndParseUInt(TxtBlindSpot.Text.Trim(), "盲区距离", out uint val)) return;
+
+                // 验证盲区范围（50-200cm）
+                if (val < 50 || val > 200)
+                {
+                    LogError($"盲区距离超出范围：{val}cm，有效范围为50-200cm");
+                    return;
+                }
+
                 _radar!.SetBlindSpot(val);
                 Log($"已设置盲区: {val}cm");
             }
@@ -1046,6 +1126,137 @@ namespace LivoxLidarConfigurator
             }
         }
 
+        #region 输入验证辅助方法
+
+        /// <summary>
+        /// 验证并解析 ushort 类型端口号
+        /// </summary>
+        /// <param name="text">输入文本</param>
+        /// <param name="fieldName">字段名称（用于错误提示）</param>
+        /// <param name="result">解析结果</param>
+        /// <returns>是否验证通过</returns>
+        private bool ValidateAndParseUshort(string text, string fieldName, out ushort result)
+        {
+            if (!ushort.TryParse(text, out result))
+            {
+                LogError($"\"{fieldName}\"输入无效：\"{text}\" 不是有效的端口号（范围 0-65535）");
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 尝试解析端口号（不输出错误日志，用于非必填场景）
+        /// </summary>
+        /// <param name="text">输入文本</param>
+        /// <param name="fieldName">字段名称（用于错误提示）</param>
+        /// <returns>解析结果，失败时返回null</returns>
+        private int? TryParsePort(string text, string fieldName)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            if (ushort.TryParse(text.Trim(), out ushort port))
+                return port;
+            LogError($"\"{fieldName}\"输入无效：\"{text}\" 不是有效的端口号（范围 0-65535）");
+            return null;
+        }
+
+        /// <summary>
+        /// 验证并解析 int 类型整数值
+        /// </summary>
+        /// <param name="text">输入文本</param>
+        /// <param name="fieldName">字段名称（用于错误提示）</param>
+        /// <param name="result">解析结果</param>
+        /// <returns>是否验证通过</returns>
+        private bool ValidateAndParseInt(string text, string fieldName, out int result)
+        {
+            if (!int.TryParse(text, out result))
+            {
+                LogError($"\"{fieldName}\"输入无效：\"{text}\" 不是有效的整数");
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 验证并解析 float 类型浮点数值
+        /// </summary>
+        /// <param name="text">输入文本</param>
+        /// <param name="fieldName">字段名称（用于错误提示）</param>
+        /// <param name="result">解析结果</param>
+        /// <returns>是否验证通过</returns>
+        private bool ValidateAndParseFloat(string text, string fieldName, out float result)
+        {
+            if (!float.TryParse(text, out result))
+            {
+                LogError($"\"{fieldName}\"输入无效：\"{text}\" 不是有效的数值");
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 验证并解析 uint 类型无符号整数值
+        /// </summary>
+        /// <param name="text">输入文本</param>
+        /// <param name="fieldName">字段名称（用于错误提示）</param>
+        /// <param name="result">解析结果</param>
+        /// <returns>是否验证通过</returns>
+        private bool ValidateAndParseUInt(string text, string fieldName, out uint result)
+        {
+            if (!uint.TryParse(text, out result))
+            {
+                LogError($"\"{fieldName}\"输入无效：\"{text}\" 不是有效的正整数");
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 验证IP地址格式是否合法
+        /// </summary>
+        /// <param name="ipText">IP地址文本</param>
+        /// <param name="fieldName">字段名称（用于错误提示）</param>
+        /// <returns>是否验证通过</returns>
+        private bool ValidateIpAddress(string ipText, string fieldName)
+        {
+            if (string.IsNullOrWhiteSpace(ipText))
+            {
+                LogError($"\"{fieldName}\"不能为空");
+                return false;
+            }
+
+            //if (!IPAddress.TryParse(ipText, out IPAddress? addr))
+            if (!IPAddress.TryParse(ipText, out _))
+            {
+                LogError($"\"{fieldName}\"格式无效：\"{ipText}\" 不是有效的IP地址");
+                return false;
+            }
+            return true;
+        }
+
+        #endregion
+
+        #region 配置回填方法
+
+        /// <summary>
+        /// 从雷达管理器的当前配置中读取端口值，回填到网络配置面板的输入框
+        /// 确保UI显示与实际配置一致，避免用户误以为使用了默认值
+        /// </summary>
+        private void FillNetworkConfigFromRadar()
+        {
+            if (_radar?.Config?.HapConfig?.HostNetInfo == null || _radar.Config.HapConfig.HostNetInfo.Count == 0)
+                return;
+
+            var hostNetInfo = _radar.Config.HapConfig.HostNetInfo[0];
+            TxtCfgHostIp.Text = hostNetInfo.HostIp;
+            TxtCfgCmdPort.Text = hostNetInfo.CmdDataPort.ToString();
+            TxtCfgPointPort.Text = hostNetInfo.PointDataPort.ToString();
+            TxtCfgImuPort.Text = hostNetInfo.ImuDataPort.ToString();
+            TxtCfgPushPort.Text = hostNetInfo.PushMsgPort.ToString();
+        }
+
+        #endregion
+
         /// <summary>
         /// 智能解析KeyValueResult，根据Key类型返回可读的值
         /// </summary>
@@ -1178,26 +1389,111 @@ namespace LivoxLidarConfigurator
 
     #region 设备列表项模型
 
+#if NET45_OR_GREATER
     /// <summary>
     /// 设备列表项模型，封装 LidarDeviceInfo 并提供 UI 显示所需的属性
+    /// 实现 INotifyPropertyChanged 接口，确保连接状态变更时UI指示灯自动刷新
+    /// </summary>
+    public class DeviceListItem : INotifyPropertyChanged
+    {
+        /// <summary>设备信息实体</summary>
+        public LidarDeviceInfo DeviceInfo { get; }
+
+        /// <summary>是否已连接</summary>
+        private bool _isConnected;
+
+        /// <summary>
+        /// 构造设备列表项
+        /// </summary>
+        /// <param name="deviceInfo">设备信息</param>
+        public DeviceListItem(LidarDeviceInfo deviceInfo)
+        {
+            DeviceInfo = deviceInfo;
+            _isConnected = deviceInfo.IsConnected;
+        }
+#elif NET9_0_OR_GREATER
+    /// <summary>
+    /// 设备列表项模型，封装 LidarDeviceInfo 并提供 UI 显示所需的属性
+    /// 实现 INotifyPropertyChanged 接口，确保连接状态变更时UI指示灯自动刷新
     /// </summary>
     /// <remarks>
     /// 构造设备列表项
     /// </remarks>
     /// <param name="deviceInfo">设备信息</param>
-    public class DeviceListItem(LidarDeviceInfo deviceInfo)
+    public class DeviceListItem(LidarDeviceInfo deviceInfo) : INotifyPropertyChanged
     {
         /// <summary>设备信息实体</summary>
         public LidarDeviceInfo DeviceInfo { get; } = deviceInfo;
 
         /// <summary>是否已连接</summary>
-        public bool IsConnected { get; set; } = deviceInfo.IsConnected;
+        private bool _isConnected = deviceInfo.IsConnected;
+#endif
+
+        /// <summary>
+        /// 是否已连接（设置时触发属性变更通知，使UI绑定自动更新）
+        /// </summary>
+        public bool IsConnected
+        {
+            get { return _isConnected; }
+            set
+            {
+                if (_isConnected != value)
+                {
+                    _isConnected = value;
+                    OnPropertyChanged(nameof(IsConnected));
+                    OnPropertyChanged(nameof(ConnStatusColor));
+                }
+            }
+        }
 
         /// <summary>显示名称（格式：型号 SN IP）</summary>
         public string DisplayName => $"{DeviceInfo.DeviceTypeName} | {DeviceInfo.SerialNumberString} | {DeviceInfo.LidarIpString}";
 
-        /// <summary>连接状态指示灯颜色</summary>
+        /// <summary>连接状态指示灯颜色（根据IsConnected自动切换）</summary>
         public Brush ConnStatusColor => IsConnected ? Brushes.LimeGreen : Brushes.Gray;
+
+        ///// <summary>
+        ///// 构造设备列表项
+        ///// </summary>
+        ///// <param name="deviceInfo">设备信息</param>
+        //public DeviceListItem(LidarDeviceInfo deviceInfo)
+        //{
+        //    DeviceInfo = deviceInfo;
+        //    _isConnected = deviceInfo.IsConnected;
+        //}
+
+        /// <summary>
+        /// 手动通知属性变更（用于非setter路径的状态更新）
+        /// </summary>
+        public void NotifyStateChanged()
+        {
+            OnPropertyChanged(nameof(IsConnected));
+            OnPropertyChanged(nameof(ConnStatusColor));
+        }
+
+        /// <summary>
+        /// 属性变更事件
+        /// </summary>
+        public event PropertyChangedEventHandler
+            //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+            PropertyChanged;
+
+        /// <summary>
+        /// 触发属性变更通知
+        /// </summary>
+        /// <param name="propertyName">变更的属性名称</param>
+        protected void OnPropertyChanged([CallerMemberName] string
+            //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+  propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 
     #endregion
