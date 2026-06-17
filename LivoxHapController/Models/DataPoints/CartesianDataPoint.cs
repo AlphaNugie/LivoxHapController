@@ -1,6 +1,8 @@
 ﻿#if NET45_OR_GREATER
 using System;
+using System.Collections.Generic;
 #endif
+using LivoxHapController.Services.Parsers;
 using static LivoxHapController.Services.Parsers.PointTagInformation;
 
 namespace LivoxHapController.Models.DataPoints

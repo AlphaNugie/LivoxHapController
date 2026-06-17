@@ -2,6 +2,10 @@ using System;
 using System.Net;
 using System.Net.Sockets;
 using LivoxHapController.Enums;
+using LivoxHapController.Utilities;
+#if NET45_OR_GREATER
+using System.Threading;
+#endif
 
 namespace LivoxHapController.Services
 {

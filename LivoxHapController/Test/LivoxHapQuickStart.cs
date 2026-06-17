@@ -218,56 +218,58 @@ namespace LivoxHapController.Test
 
         #region 数据处理
 
-        /// <summary>
-        /// 异步合并点云数据（解析、坐标变换、写入缓冲区）
-        /// </summary>
-        /// <param name="e">点云原始字节数据</param>
-        private static async Task MergeAsync(byte[] e)
-        {
-            // 异步解析数据包
-            var packet = await Task.Run(() => PointCloudParser.ParsePacket(e));
-            if (packet == null) return;
+        #region 原 MergeAsync 方法（已注释）
+        //        /// <summary>
+        //        /// 异步合并点云数据（解析、坐标变换、写入缓冲区）
+        //        /// </summary>
+        //        /// <param name="e">点云原始字节数据</param>
+        //        private static async Task MergeAsync(byte[] e)
+        //        {
+        //            // 异步解析数据包
+        //            var packet = await Task.Run(() => PointCloudParser.ParsePacket(e));
+        //            if (packet == null) return;
 
-            // 更新状态（需加锁确保线程安全）
-            lock (_syncRoot)
-            {
-                LastReceivedTime = DateTime.Now;
-                // 取280个字节的数据并转换为16进制字符串
-                int datalen = 280;
-                PacketData = e.Take(datalen).Aggregate("", (current, b) => current + b.ToString("X2") + " ").Trim();
-            }
+        //            // 更新状态（需加锁确保线程安全）
+        //            lock (_syncRoot)
+        //            {
+        //                LastReceivedTime = DateTime.Now;
+        //                // 取280个字节的数据并转换为16进制字符串
+        //                int datalen = 280;
+        //                PacketData = e.Take(datalen).Aggregate("", (current, b) => current + b.ToString("X2") + " ").Trim();
+        //            }
 
-            DataType = packet.Header.DataType;
-            switch (DataType)
-            {
-                case PointCloudDataType.Cartesian16Bit:
-                case PointCloudDataType.Cartesian32Bit:
-                    var points = packet.CartesianDataPoints.ToArray();
-                    // 假如坐标转换参数集不为null，则进行坐标转换
-                    // 为增加性能，在将点云数据插入缓存前，先进行坐标转换
-                    if (CoordTransParamSet != null)
-                        points = await Task.Run(() =>
-                            points.TransformPoints(CoordTransParamSet)
-                        ).ConfigureAwait(false);
+        //            DataType = packet.Header.DataType;
+        //            switch (DataType)
+        //            {
+        //                case PointCloudDataType.Cartesian16Bit:
+        //                case PointCloudDataType.Cartesian32Bit:
+        //                    var points = packet.CartesianDataPoints.ToArray();
+        //                    // 假如坐标转换参数集不为null，则进行坐标转换
+        //                    // 为增加性能，在将点云数据插入缓存前，先进行坐标转换
+        //                    if (CoordTransParamSet != null)
+        //                        points = await Task.Run(() =>
+        //                            points.TransformPoints(CoordTransParamSet)
+        //                        ).ConfigureAwait(false);
 
-                    // 异步写入缓冲区
-#if BM
-                    await Task.Run(() => BufferServiceRawPoints.AddDataChunk(points));
-#else
-                    // 使用高效队列替代List
-                    foreach (var point in points)
-                    {
-                        CartesianRawPointsQueue.Enqueue(point);
-                    }
-#endif
-                    break;
-                case PointCloudDataType.ImuData:
-                    break;
-            }
-            LastMergedTime = DateTime.Now;
-            PacketHeader = string.Format("time: {0:yyyy-MM-dd HH:mm:ss.fff}, Point cloud timestamp: {1}, udp_counter: {2}, data_num: {3}, data_type: {4}, length: {5}, frame_counter: {6}",
-                LastReceivedTime, packet.Header.TimestampNanoSec, packet.Header.UdpCnt, packet.Header.DotNum, packet.Header.DataType, packet.Header.Length, packet.Header.FrameCnt);
-        }
+        //                    // 异步写入缓冲区
+        //#if BM
+        //                    await Task.Run(() => BufferServiceRawPoints.AddDataChunk(points));
+        //#else
+        //                    // 使用高效队列替代List
+        //                    foreach (var point in points)
+        //                    {
+        //                        CartesianRawPointsQueue.Enqueue(point);
+        //                    }
+        //#endif
+        //                    break;
+        //                case PointCloudDataType.ImuData:
+        //                    break;
+        //            }
+        //            LastMergedTime = DateTime.Now;
+        //            PacketHeader = string.Format("time: {0:yyyy-MM-dd HH:mm:ss.fff}, Point cloud timestamp: {1}, udp_counter: {2}, data_num: {3}, data_type: {4}, length: {5}, frame_counter: {6}",
+        //                LastReceivedTime, packet.Header.TimestampNanoSec, packet.Header.UdpCnt, packet.Header.DotNum, packet.Header.DataType, packet.Header.Length, packet.Header.FrameCnt);
+        //        }
+        #endregion
 
         /// <summary>
         /// 同步合并点云数据（解析、坐标变换、写入缓冲区）
@@ -330,17 +332,17 @@ namespace LivoxHapController.Test
             await Task.Run(() => Merge(e));
         }
 
-        /// <summary>
-        /// 点云数据接收回调（完整流程模式，来自LivoxHapRadar）
-        /// </summary>
-#if NET45_OR_GREATER
-        private static async void Radar_PointCloudDataReceived(object sender, byte[] e)
-#elif NET9_0_OR_GREATER
-        private static async void Radar_PointCloudDataReceived(object? sender, byte[] e)
-#endif
-        {
-            await Task.Run(() => Merge(e));
-        }
+//        /// <summary>
+//        /// 点云数据接收回调（完整流程模式，来自LivoxHapRadar）
+//        /// </summary>
+//#if NET45_OR_GREATER
+//        private static async void Radar_PointCloudDataReceived(object sender, byte[] e)
+//#elif NET9_0_OR_GREATER
+//        private static async void Radar_PointCloudDataReceived(object? sender, byte[] e)
+//#endif
+//        {
+//            await Task.Run(() => Merge(e));
+//        }
 
         #endregion
 
@@ -447,7 +449,11 @@ namespace LivoxHapController.Test
         /// 1. 调用此方法启动完整流程
         /// 2. 可通过 DeviceDiscovered 事件获知发现的设备
         /// 3. 首个设备被发现后将自动连接和配置
-        /// 4. 点云数据通过 GetCurrentFrameOfRawPoints() 获取
+        /// 4. 点云数据通过 GetCurrentFrameOfRawPoints() 获取（需先设置 EnablePointCloudProcessing = true）
+        /// 
+        /// 注意：自基础库集成点云处理功能后，Radar_PointCloudDataReceived 回调
+        /// 不再手动调用 Merge()，而是通过 _radar.EnablePointCloudProcessing 开关
+        /// 控制内部自动处理（解析→坐标变换→写入缓冲区）
         /// </summary>
         /// <param name="configFile">配置文件路径或名称</param>
         /// <param name="coordTransParamSet">坐标转换参数集（可选）</param>
@@ -464,8 +470,9 @@ namespace LivoxHapController.Test
             if (coordTransParamSet != null)
                 CoordTransParamSet = coordTransParamSet;
 
-            // 订阅点云数据事件
-            _radar.PointCloudDataReceived += Radar_PointCloudDataReceived;
+            // 开启点云处理功能：内部自动执行解析→坐标变换→写入缓冲区
+            // 无需再手动订阅 PointCloudDataReceived 并调用 Merge()
+            _radar.EnablePointCloudProcessing = true;
 
             // 订阅设备发现事件：首个设备发现后自动连接并配置
             _radar.DeviceDiscovered += (sender, device) =>
@@ -521,20 +528,11 @@ namespace LivoxHapController.Test
             // 初始化
             _radar.Initialize(configFile, coordTransParamSet);
 
-            // 设置帧时间
-            if (AppConfig.Instance?.HapConfig?.HostNetInfo?.Count > 0)
-                FrameTime = AppConfig.Instance.HapConfig.HostNetInfo[0].FrameTime;
-
             // 启动设备发现（同时启动UDP监听）
             string hostIp = AppConfig.Instance?.HapConfig?.HostNetInfo?.Count > 0
                 ? AppConfig.Instance.HapConfig.HostNetInfo[0].HostIp
                 : "";
             _radar.Discover(hostIp);
-
-            // 创建 CancellationTokenSource
-            _cancellationTokenSource = new CancellationTokenSource();
-            // 启动异步监控缓存
-            _ = MonitorAndTrimCacheAsync(_cancellationTokenSource.Token);
 
             Console.WriteLine("Livox Quick Start Demo Start! (Full mode)");
         }
@@ -560,9 +558,15 @@ namespace LivoxHapController.Test
 
         /// <summary>
         /// 获取当前帧的数据快照（线程安全）（笛卡尔坐标系高精度坐标点，精度1mm）
+        /// 优先使用 LivoxHapRadar 内置的点云处理功能
+        /// 当内置处理未启用时，回退到本地缓存
         /// </summary>
         public static CartesianDataPoint[] GetCurrentFrameOfRawPoints()
         {
+            // 优先使用内置点云处理的结果
+            if (_radar != null && _radar.EnablePointCloudProcessing)
+                return _radar.GetCurrentFrameOfRawPoints();
+
 #if BM
             return BufferServiceRawPoints.SwapAndGetSnapshot();
 #else

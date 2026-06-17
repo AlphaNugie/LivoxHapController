@@ -1,12 +1,12 @@
 ﻿using LivoxHapController.Config;
 using LivoxHapController.Enums;
 using LivoxHapController.Services.Parsers;
+using LivoxHapController.Utilities;
+using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
-#if NET45_OR_GREATER
-using System;
 using System.Threading;
-#endif
 
 namespace LivoxHapController.Services
 {

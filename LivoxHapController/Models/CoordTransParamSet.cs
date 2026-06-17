@@ -21,17 +21,17 @@
         public double Yaw { get; set; }
 
         /// <summary>
-        /// X坐标偏移量（单位：毫米）
+        /// X坐标偏移量（单位：米）
         /// </summary>
         public double X { get; set; }
 
         /// <summary>
-        /// Y坐标偏移量（单位：毫米）
+        /// Y坐标偏移量（单位：米）
         /// </summary>
         public double Y { get; set; }
 
         /// <summary>
-        /// Z坐标偏移量（单位：毫米）
+        /// Z坐标偏移量（单位：米）
         /// </summary>
         public double Z { get; set; }
 
@@ -56,9 +56,9 @@
         /// <param name="roll">横滚角，绕X轴旋转的角度（单位：度），绕X轴旋转的角度（单位：度），向前看时顺时针旋转为正</param>
         /// <param name="pitch">俯仰角，绕Y轴旋转的角度（单位：度），绕Y轴旋转的角度（单位：度），向下转为正</param>
         /// <param name="yaw">偏航角，绕Z轴旋转的角度（单位：度），绕Z轴旋转的角度（单位：度），俯视时向左为正</param>
-        /// <param name="x">X坐标偏移量（单位：毫米）</param>
-        /// <param name="y">Y坐标偏移量（单位：毫米）</param>
-        /// <param name="z">Z坐标偏移量（单位：毫米）</param>
+        /// <param name="x">X坐标偏移量（单位：米）</param>
+        /// <param name="y">Y坐标偏移量（单位：米）</param>
+        /// <param name="z">Z坐标偏移量（单位：米）</param>
         public CoordTransParamSet(double roll, double pitch, double yaw, double x = 0, double y = 0, double z = 0)
         {
             Roll = roll;

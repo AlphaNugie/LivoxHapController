@@ -65,3 +65,7 @@ nunit-*.xml
 /crc_test.csx
 /LivoxHapController/.vs
 /.codebuddy/.rules
+*.zip
+/PowerShell脚本压缩目录排除文件-cn.ps1
+/PowerShell脚本压缩目录排除文件-excl-模板.txt
+/PowerShell脚本压缩目录排除文件-excl.txt

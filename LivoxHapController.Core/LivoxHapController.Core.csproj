@@ -40,6 +40,9 @@
 		 <Compile Include="..\LivoxHapController\Utilities\ObjectPool.cs"> <Link>Utilities\ObjectPool.cs</Link> </Compile> 
 		 <Compile Include="..\LivoxHapController\Utilities\HexUtils.cs"> <Link>Utilities\HexUtils.cs</Link> </Compile>
 		 <Compile Include="..\LivoxHapController\Utilities\DateTimeUtils.cs"> <Link>Utilities\DateTimeUtils.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Utilities\NetworkUtils.cs"> <Link>Utilities\NetworkUtils.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Utilities\ColorGradient.cs"> <Link>Utilities\ColorGradient.cs</Link> </Compile> 
+		 <Compile Include="..\LivoxHapController\Utilities\RadarRegistry.cs"> <Link>Utilities\RadarRegistry.cs</Link> </Compile> 
 		 <Compile Include="..\LivoxHapController\Config\AppConfig.cs"> <Link>Config\AppConfig.cs</Link> </Compile> 
 		 <Compile Include="..\LivoxHapController\Config\AppConfigBuilder.cs"> <Link>Config\AppConfigBuilder.cs</Link> </Compile> 
 		 <Compile Include="..\LivoxHapController\Config\ConfigLoader.cs"> <Link>Config\ConfigLoader.cs</Link> </Compile> 
@@ -52,6 +55,10 @@
 		 <Compile Include="..\LivoxHapController\Services\KeyValueCodec.cs"> <Link>Services\KeyValueCodec.cs</Link> </Compile>
 		 <Compile Include="..\LivoxHapController\Services\LidarDiscovery.cs"> <Link>Services\LidarDiscovery.cs</Link> </Compile>
 		 <Compile Include="..\LivoxHapController\Services\LidarCommander.cs"> <Link>Services\LidarCommander.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\PointCloudRecorder.cs"> <Link>Services\PointCloudRecorder.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\PointCloudPlayer.cs"> <Link>Services\PointCloudPlayer.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\Parsers\CsvPointCloudImporter.cs"> <Link>Services\Parsers\CsvPointCloudImporter.cs</Link> </Compile>
+		 <Compile Include="..\LivoxHapController\Services\Parsers\XyzPointCloudExporter.cs"> <Link>Services\Parsers\XyzPointCloudExporter.cs</Link> </Compile>
 		 <Compile Include="..\LivoxHapController\Services\Parsers\AckResponseParser.cs"> <Link>Services\Parsers\AckResponseParser.cs</Link> </Compile>
 		 <Compile Include="..\LivoxHapController\Models\LidarDeviceInfo.cs"> <Link>Models\LidarDeviceInfo.cs</Link> </Compile>
 		 <Compile Include="..\LivoxHapController\Services\LivoxHapRadar.cs"> <Link>Services\LivoxHapRadar.cs</Link> </Compile>
