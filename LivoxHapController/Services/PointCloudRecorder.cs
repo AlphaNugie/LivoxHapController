@@ -1,10 +1,10 @@
 #if NET45_OR_GREATER
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Threading;
 #endif
+using System.Diagnostics;
 
 using System.Linq.Expressions;
 
@@ -73,11 +73,12 @@ namespace LivoxHapController.Services
         private DateTime _segmentStartTime;
 
         /// <summary>实际录制时长计时器（排除暂停时间），仅在非暂停时运行</summary>
+        private Stopwatch
+            //.net 9框架下使返回对象可为空
 #if NET9_0_OR_GREATER
-        private Stopwatch? _activeRecordingStopwatch;
-#elif NET45_OR_GREATER
-        private Stopwatch _activeRecordingStopwatch;
+            ?
 #endif
+            _activeRecordingStopwatch;
 
         /// <summary>暂停绑定信息</summary>
         private PauseBinding
@@ -326,7 +327,7 @@ namespace LivoxHapController.Services
             {
                 Target = target,
                 PropertyName = propertyName,
-                LastValue = GetPropertyValue(target, propertyName)
+                //LastValue = GetPropertyValue(target, propertyName)
             };
 
             // 如果已在录制，启动轮询
