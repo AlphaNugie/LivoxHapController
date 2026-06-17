@@ -373,6 +373,8 @@ radar.StopPlayback();
 | `Recorder.MaxDurationReached` | 录制达到最大时长，自动停止 |
 | `Recorder.DeadlineReached` | 录制达到截止时间，自动停止 |
 | `Recorder.RecordingStopped` | 录制停止（手动或自动） |
+| `Player.PlaybackCompleted` | 播放完成 |
+| `Player.ProgressChanged` | 播放进度变更 |
 
 #### 点云着色策略（Color Coding）
 
@@ -428,6 +430,7 @@ var (r, g, b) = ColorGradient.GetElevationColor(
 ```
 
 > `ColorGradient` 类不依赖任何 UI 框架，返回纯 `(byte R, byte G, byte B)` 元组，可适配 WPF、WinForms、Unity 等多种平台。
+
 #### 设备推送消息
 
 雷达每 1 秒主动推送工作状态、参数信息等。订阅 `PushMessageReceived` 事件获取原始推送数据，订阅 `DeviceStatusUpdated` 事件获取解析后的查询/推送结果。
@@ -665,7 +668,8 @@ radar.Dispose();
 5. 在配置面板中设置参数，在查询区域查询设备信息
 6. 点击 **启动扫描** 开始接收点云数据
 7. 点击 **开始录制**，在弹出的保存对话框中选择 .pcr 文件路径，开始录制原始点云数据；再次点击同一按钮（此时显示为"停止录制"）结束录制
-8. 点云区域显示数据包统计和摘要
+8. 日志区域实时显示 ACK 响应（含 Return Code 描述）和错误信息
+9. 点云区域显示数据包统计和摘要
 
 ---
 
@@ -818,6 +822,8 @@ LivoxHapController/
 │   └── Parsers/                #   数据解析器
 │       ├── AckResponseParser.cs    # ACK 响应解析（含 ret_code 检查）
 │       ├── PointCloudParser.cs     # 点云数据解析
+│       ├── CsvPointCloudImporter.cs # Livox Viewer CSV点云导入
+│       ├── XyzPointCloudExporter.cs # XYZ点云文件导出
 │       └── ProtocolParser.cs       # 协议通用解析
 ├── Utilities/
 │   ├── ObjectPool.cs           #   对象池

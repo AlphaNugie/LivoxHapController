@@ -358,7 +358,7 @@ namespace LivoxHapController.Services
                     StartCacheMonitor();
                 else
                     StopCacheMonitor();
-        }
+            }
         }
 
         /// <summary>
@@ -581,8 +581,11 @@ namespace LivoxHapController.Services
         /// <summary>
         /// 开始搜索网络中的LiDAR设备
         /// 启动广播发现并监听设备响应，同时启动UDP数据端口监听
+        /// 当端口被占用时，LidarDiscovery会自动尝试随机端口，UdpCommunicator会等待重试
+        /// 超过重试限制后将抛出InvalidOperationException
         /// </summary>
         /// <param name="hostIp">本机IP地址（用于绑定监听端口），为空则绑定所有接口</param>
+        /// <exception cref="InvalidOperationException">端口被占用超时或未初始化时抛出</exception>
         public void Discover(string hostIp = "")
         {
             if (!IsInitialized)
@@ -593,21 +596,38 @@ namespace LivoxHapController.Services
                 ? Config.HapConfig.HostNetInfo[0].HostIp
                 : hostIp;
 
+            // 启动UDP数据端口监听（带端口占用等待重试）
             if (_udpComm != null)
             {
                 _udpComm.PointCloudDataReceived += OnPointCloudDataReceived;
                 _udpComm.ImuDataReceived += OnImuDataReceived;
                 _udpComm.CommandAckReceived += OnCommandAckReceived;
                 _udpComm.CommandPushReceived += OnCommandPushReceived;
-                // 启动UDP数据端口监听
-                if (Config?.HapConfig?.HostNetInfo?.Count > 0)
-                    _udpComm.StartListening(Config.HapConfig.HostNetInfo[0]);
-                else
-                    _udpComm.StartListening(ip);
+                try
+                {
+                    // 启动UDP数据端口监听
+                    if (Config?.HapConfig?.HostNetInfo?.Count > 0)
+                        _udpComm.StartListening(Config.HapConfig.HostNetInfo[0]);
+                    else
+                        _udpComm.StartListening(ip);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    // 端口等待超时，向上层报告友好错误
+                    throw new InvalidOperationException("UDP数据端口绑定失败：" + ex.Message, ex);
+                }
             }
 
-            // 启动设备发现
-            _discovery?.Start(ip);
+            // 启动设备发现（带端口占用自动重试随机端口）
+            try
+            {
+                _discovery?.Start(ip);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // 发现端口全部被占用，向上层报告友好错误
+                throw new InvalidOperationException("设备发现端口绑定失败：" + ex.Message, ex);
+            }
         }
 
         /// <summary>
@@ -626,7 +646,9 @@ namespace LivoxHapController.Services
 
             // 创建命令控制器
             // 传入UdpCommunicator，使命令通过其命令端口发送，确保ACK能被正确接收
-            _commander = new LidarCommander(deviceInfo.LidarIpString, deviceInfo.CommandPort, _udpComm);
+            // 主机IP配置优先使用配置文件中的HostNetInfo，如果没有则自动查找与设备IP同段的本机IP
+            string ip = Config?.HapConfig?.HostNetInfo?.Count > 0 ? Config.HapConfig.HostNetInfo[0].HostIp : NetworkUtils.GetHostIpInSameSegment(deviceInfo.LidarIpString);
+            _commander = new LidarCommander(deviceInfo.LidarIpString, ip, deviceInfo.CommandPort, _udpComm);
             _connectedDevice = deviceInfo;
             _connectedDevice.IsConnected = true;
         }
@@ -638,6 +660,9 @@ namespace LivoxHapController.Services
         /// <returns>是否连接成功</returns>
         public bool ConnectBySerialNumber(string serialNumber)
         {
+            if (string.IsNullOrWhiteSpace(serialNumber))
+                throw new ArgumentNullException(nameof(serialNumber), "序列号不能为空");
+
             LidarDeviceInfo
             //.net 9框架下使返回对象可为空
 #if NET9_0_OR_GREATER
@@ -646,7 +671,7 @@ namespace LivoxHapController.Services
              device;
             lock (_syncRoot)
             {
-                device = _discoveredDevices.FirstOrDefault(d => d.SerialNumberString == serialNumber);
+                device = _discoveredDevices.FirstOrDefault(d => d.SerialNumberString.Equals(serialNumber.Trim()));
             }
 
             if (device == null) return false;
@@ -745,18 +770,25 @@ namespace LivoxHapController.Services
         /// <exception cref="InvalidOperationException">设备未连接</exception>
         public void ConfigureFromConfig()
         {
-            if (!IsConnected || _commander == null)
-                throw new InvalidOperationException("设备未连接，请先调用 Connect()");
+            //if (!IsConnected || _commander == null)
+            //    throw new InvalidOperationException("设备未连接，请先调用 Connect()");
+
+            //if (Config?.HapConfig?.HostNetInfo == null || Config.HapConfig.HostNetInfo.Count == 0)
+            //    throw new InvalidOperationException("配置中无有效的HostNetInfo");
+
+            //var hostNetInfo = Config.HapConfig.HostNetInfo[0];
+
+            //// 设置各通道的主机IP配置
+            //_commander.SetStateInfoHostIp(hostNetInfo.HostIp, (ushort)hostNetInfo.CmdDataPort, (ushort)hostNetInfo.PushMsgPort);
+            //_commander.SetPointCloudHostIp(hostNetInfo.HostIp, (ushort)hostNetInfo.PointDataPort, 0);
+            //_commander.SetImuHostIp(hostNetInfo.HostIp, (ushort)hostNetInfo.ImuDataPort, 0);
 
             if (Config?.HapConfig?.HostNetInfo == null || Config.HapConfig.HostNetInfo.Count == 0)
                 throw new InvalidOperationException("配置中无有效的HostNetInfo");
 
             var hostNetInfo = Config.HapConfig.HostNetInfo[0];
 
-            // 设置各通道的主机IP配置
-            _commander.SetStateInfoHostIp(hostNetInfo.HostIp, (ushort)hostNetInfo.CmdDataPort, (ushort)hostNetInfo.PushMsgPort);
-            _commander.SetPointCloudHostIp(hostNetInfo.HostIp, (ushort)hostNetInfo.PointDataPort, 0);
-            _commander.SetImuHostIp(hostNetInfo.HostIp, (ushort)hostNetInfo.ImuDataPort, 0);
+            Configure(hostNetInfo.HostIp, (ushort)hostNetInfo.CmdDataPort, (ushort)hostNetInfo.PointDataPort, (ushort)hostNetInfo.ImuDataPort, (ushort)hostNetInfo.PushMsgPort);
         }
 
         /// <summary>
@@ -1110,6 +1142,11 @@ namespace LivoxHapController.Services
 #endif
             sender, byte[] data)
         {
+            // 录制：在触发事件前记录原始数据（录制器为 null 时无开销）
+            //_recorder?.Record(data);
+            Recorder?.Record(data);
+
+            // 始终触发外部事件，保持向后兼容
             PointCloudDataReceived?.Invoke(this, data);
 
             // 若开启点云处理，执行内部处理流水线
@@ -1317,8 +1354,6 @@ namespace LivoxHapController.Services
                 _player = null;
 
                 // 停止UDP监听
-                _monitorCts?.Cancel();
-                _monitorCts?.Dispose();
                 _udpComm?.Dispose();
             }
 

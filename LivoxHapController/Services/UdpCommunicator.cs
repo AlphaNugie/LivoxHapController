@@ -22,7 +22,6 @@ namespace LivoxHapController.Services
         /// <summary>是否正在监听</summary>
         private bool _isListening;
 
-#if NET45_OR_GREATER
         /// <summary>
         /// 点云/IMU 来源IP过滤器
         /// 非空时只接受列表中IP发送的数据，空时不过滤接受所有来源
@@ -35,49 +34,59 @@ namespace LivoxHapController.Services
 #endif
   _pointCloudSourceIpFilter;
 
-        /// <summary>点云端口的UDP客户端</summary>
-        private UdpClient _pointCloudClient;
-
-        /// <summary>IMU端口的UDP客户端</summary>
-        private UdpClient _imuClient;
-
-        /// <summary>命令端口监听线程</summary>
-        private Thread _listenerThread;
-
-        /// <summary>点云端口监听线程</summary>
-        private Thread _listenerThreadCldPnt;
-
-        /// <summary>
-        /// 命令客户端的线程同步锁
-        /// 保护CommandClient的Send/Receive操作，防止发送线程和接收线程并发访问导致异常
-        /// </summary>
-        private readonly object _commandLock = new object();
-#elif NET9_0_OR_GREATER
         /// <summary>
         /// 命令端口的UDP客户端
         /// internal访问级别，供LidarCommander复用以发送命令，确保命令和ACK共用同一端口
         /// </summary>
-        internal UdpClient? CommandClient;
+        internal UdpClient
+  //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+  CommandClient;
 
         /// <summary>点云端口的UDP客户端</summary>
-        private UdpClient? _pointCloudClient;
+        private UdpClient
+  //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+  _pointCloudClient;
 
         /// <summary>IMU端口的UDP客户端</summary>
-        private UdpClient? _imuClient;
+        private UdpClient
+  //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+  _imuClient;
 
         /// <summary>命令端口监听线程</summary>
-        private Thread? _listenerThread;
+        private Thread
+  //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+  _listenerThread;
 
         /// <summary>点云端口监听线程</summary>
-        private Thread? _listenerThreadCldPnt;
+        private Thread
+  //.net 9框架下使返回对象可为空
+#if NET9_0_OR_GREATER
+            ?
+#endif
+  _listenerThreadCldPnt;
 
         /// <summary>
         /// 命令客户端的线程同步锁
         /// 保护CommandClient的Send/Receive操作，防止发送线程和接收线程并发访问导致异常
         /// </summary>
+#if NET9_0_OR_GREATER
         private readonly Lock _commandLock = new();
+#elif NET45_OR_GREATER
+        private readonly object _commandLock = new object();
 #endif
-
+   
         #endregion
 
         #region 事件
