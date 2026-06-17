@@ -161,6 +161,23 @@ namespace LivoxHapController.Config
             return this;
         }
 
+        /// <summary>
+        /// 覆盖IMU数据端口（同时设置HAP和MID360设备的第一个HostNetInfo）
+        /// </summary>
+        /// <param name="port">IMU数据端口号，null时不覆盖</param>
+        /// <returns>Builder实例（支持链式调用）</returns>
+        public AppConfigBuilder WithImuDataPort(int? port)
+        {
+            if (port.HasValue)
+            {
+                _config.HapConfig.EnsureHostNetInfo();
+                _config.Mid360Config.EnsureHostNetInfo();
+                _config.HapConfig.HostNetInfo[0].ImuDataPort = port.Value;
+                _config.Mid360Config.HostNetInfo[0].ImuDataPort = port.Value;
+            }
+            return this;
+        }
+
         #endregion
 
         #region 构建方法
