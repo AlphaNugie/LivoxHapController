@@ -165,28 +165,68 @@ namespace LivoxHapController.Services
         /// <summary>
         /// 启动UDP监听服务
         /// 同时启动命令端口、点云端口和IMU端口的监听
+        /// 当端口被占用时，等待0.5秒后重试，最长等待10秒，超时后上报错误
+        /// 三个端口的绑定重试逻辑互相隔离，已成功的端口不受其他端口失败影响
         /// </summary>
         /// <param name="hostIp">本机IP地址，为空则绑定所有网络接口</param>
         /// <param name="commandPort">命令端口（默认56000）</param>
         /// <param name="pointCloudPort">点云端口（默认57000）</param>
         /// <param name="imuPort">IMU端口（默认58000）</param>
+        /// <exception cref="InvalidOperationException">等待10秒后端口仍被占用时抛出</exception>
         public void StartListening(string hostIp = "", int commandPort = 56000, int pointCloudPort = 57000, int imuPort = 58000)
         {
-            // 绑定命令端口（用于接收ACK响应和设备推送消息）
+            // 端口绑定重试参数
+            const int retryIntervalMs = 500;   // 每次重试间隔0.5秒
+            //const int maxRetryTimeMs = 10000;   // 最长等待10秒
+            const int maxRetryTimeMs = 2000;   // 最长等待时间（毫秒）
+
+            // 收集最终绑定失败的端口信息（用于统一上报）
+            var failedPorts = new List<string>();
+
+            // 三个端口独立重试绑定，互不影响：
+            // 已成功绑定的端口不会被其他端口的失败所干扰
+
+            // 尝试绑定命令端口（用于接收ACK响应和设备推送消息）
             // 同时也作为发送命令的端口，确保雷达的"跟随策略"将ACK回复到同一端口
-            CommandClient = string.IsNullOrWhiteSpace(hostIp)
-                ? new UdpClient(commandPort)
-                : new UdpClient(new IPEndPoint(IPAddress.Parse(hostIp), commandPort));
+            if (!TryBindPortWithRetry(
+                    port => CommandClient = CreateUdpClient(hostIp, port),
+                    commandPort, retryIntervalMs, maxRetryTimeMs, "命令端口", failedPorts))
+            {
+                //// 命令端口绑定失败，清理并上报
+                // 命令端口绑定失败，清理但不上报
+                ////CleanupClients();
+                //CommandClient?.Close();
+                //CommandClient = null;
+                CleanupCommandClient();
+                //throw new InvalidOperationException(
+                    //string.Format("等待端口释放超时（{1}秒），命令端口 {0} 仍被占用，请检查是否有其他程序或Livox实例正在运行", commandPort, maxRetryTimeMs / 1000));
+            }
 
-            // 绑定点云端口（用于接收点云数据）
-            _pointCloudClient = string.IsNullOrWhiteSpace(hostIp)
-                ? new UdpClient(pointCloudPort)
-                : new UdpClient(new IPEndPoint(IPAddress.Parse(hostIp), pointCloudPort));
+            // 尝试绑定点云端口（用于接收点云数据）
+            if (!TryBindPortWithRetry(
+                    port => _pointCloudClient = CreateUdpClient(hostIp, port),
+                    pointCloudPort, retryIntervalMs, maxRetryTimeMs, "点云端口", failedPorts))
+            {
+                // 点云端口绑定失败，清理并上报
+                //CleanupClients();
+                _pointCloudClient?.Close();
+                _pointCloudClient = null;
+                throw new InvalidOperationException(
+                    string.Format("等待端口释放超时（{1}秒），点云端口 {0} 仍被占用，请检查是否有其他程序或Livox实例正在运行", pointCloudPort, maxRetryTimeMs / 1000));
+            }
 
-            // 绑定IMU端口（用于接收IMU数据）
-            _imuClient = string.IsNullOrWhiteSpace(hostIp)
-                ? new UdpClient(imuPort)
-                : new UdpClient(new IPEndPoint(IPAddress.Parse(hostIp), imuPort));
+            // 尝试绑定IMU端口（用于接收IMU数据）
+            if (!TryBindPortWithRetry(
+                    port => _imuClient = CreateUdpClient(hostIp, port),
+                    imuPort, retryIntervalMs, maxRetryTimeMs, "IMU端口", failedPorts))
+            {
+                // IMU端口绑定失败，清理并上报
+                //CleanupClients();
+                _imuClient?.Close();
+                _imuClient = null;
+                throw new InvalidOperationException(
+                    string.Format("等待端口释放超时（{1}秒），IMU端口 {0} 仍被占用，请检查是否有其他程序或Livox实例正在运行", imuPort, maxRetryTimeMs / 1000));
+            }
 
             _isListening = true;
 
@@ -206,6 +246,86 @@ namespace LivoxHapController.Services
             };
             _listenerThreadCldPnt.Start();
         }
+
+        /// <summary>
+        /// 创建绑定到指定IP和端口的UdpClient
+        /// 封装了hostIp为空和不为空两种绑定方式
+        /// </summary>
+        /// <param name="hostIp">本机IP地址，为空则绑定所有网络接口</param>
+        /// <param name="port">要绑定的端口号</param>
+        /// <returns>已绑定的UdpClient实例</returns>
+        //private static UdpClient CreateUdpClient(string hostIp, int port)
+        internal static UdpClient CreateUdpClient(string hostIp, int port)
+        {
+            return string.IsNullOrWhiteSpace(hostIp)
+                ? new UdpClient(port)
+                : new UdpClient(new IPEndPoint(IPAddress.Parse(hostIp), port));
+        }
+
+        /// <summary>
+        /// 尝试绑定单个端口，带等待重试逻辑
+        /// 当端口被占用时等待0.5秒后重试，最长等待10秒
+        /// 此方法独立处理单个端口的绑定，不影响其他端口
+        /// </summary>
+        /// <param name="bindAction">绑定动作，接收端口号，成功时设置对应的UdpClient字段</param>
+        /// <param name="port">要绑定的端口号</param>
+        /// <param name="retryIntervalMs">重试间隔（毫秒）</param>
+        /// <param name="maxRetryTimeMs">最长等待时间（毫秒）</param>
+        /// <param name="portName">端口名称（用于错误信息）</param>
+        /// <param name="failedPorts">失败端口收集列表（用于汇总报告）</param>
+        /// <returns>true=绑定成功，false=超时仍被占用</returns>
+        private static bool TryBindPortWithRetry(Action<int> bindAction, int port,
+            int retryIntervalMs, int maxRetryTimeMs, string portName, List<string> failedPorts)
+        {
+            int totalWaitedMs = 0;
+
+            while (true)
+            {
+                try
+                {
+                    bindAction(port);
+                    return true; // 绑定成功
+                }
+                catch (SocketException)
+                {
+                    // 端口被占用
+                }
+
+                // 超过最大等待时间，记录失败并返回
+                if (totalWaitedMs >= maxRetryTimeMs)
+                {
+                    failedPorts.Add(string.Format("{0} {1}", portName, port));
+                    return false;
+                }
+
+                // 等待0.5秒后重试
+                Thread.Sleep(retryIntervalMs);
+                totalWaitedMs += retryIntervalMs;
+            }
+        }
+
+        /// <summary>
+        /// 清理已创建的命令客户端资源（UDP）
+        /// </summary>
+        internal void CleanupCommandClient()
+        {
+            CommandClient?.Close();
+            CommandClient = null;
+        }
+
+        ///// <summary>
+        ///// 清理所有已创建的UDP客户端资源
+        ///// 在绑定失败时调用，确保不遗留部分绑定的端口
+        ///// </summary>
+        //private void CleanupClients()
+        //{
+        //    CommandClient?.Close();
+        //    CommandClient = null;
+        //    _pointCloudClient?.Close();
+        //    _pointCloudClient = null;
+        //    _imuClient?.Close();
+        //    _imuClient = null;
+        //}
 
         #endregion
 
