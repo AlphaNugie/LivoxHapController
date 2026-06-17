@@ -791,9 +791,11 @@ namespace LivoxHapController.Services
         /// 断开与设备的连接
         /// 释放命令控制器资源，标记设备为未连接
         /// </summary>
-        public void Disconnect()
+        /// <param name="stopScan">是否顺便停止扫描，true=停止扫描后断开，false=直接断开（雷达继续扫描），默认false</param>
+        public void Disconnect(bool stopScan = false)
         {
-            if (_isScanning)
+            // 根据参数决定是否在断开前停止扫描
+            if (stopScan && _isScanning)
                 StopScan();
 
             _commander?.Dispose();
