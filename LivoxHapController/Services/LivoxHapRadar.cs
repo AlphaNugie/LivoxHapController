@@ -89,7 +89,10 @@ namespace LivoxHapController.Services
 
         /// <summary>异步监控缓存的取消令牌源，按需创建</summary>
 #if NET9_0_OR_GREATER
-        private readonly CancellationTokenSource? _monitorCts;
+        private CancellationTokenSource? _monitorCts;
+#elif NET45_OR_GREATER
+        private CancellationTokenSource _monitorCts;
+#endif
 
         #region 录制与播放
 
@@ -110,9 +113,68 @@ namespace LivoxHapController.Services
             _player;
 
         #endregion
-#elif NET45_OR_GREATER
-        private readonly CancellationTokenSource _monitorCts;
+
+        #region 点云处理私有字段
+
+        /// <summary>点云处理开关，默认关闭。开启后内部自动解析点云数据包、执行坐标变换、写入缓冲区</summary>
+        private bool _enablePointCloudProcessing;
+
+        /// <summary>每包包含的点数（固定96点）</summary>
+        private const int PointsPerPkg = 96;
+
+        /// <summary>每毫秒包含的包数（HAP点发送速率452KHz，96点/包 ≈ 4包/ms）</summary>
+        private const int PkgsPerMillisec = 4;
+
+        /// <summary>每毫秒包含的点数</summary>
+        private const int PointsPerMillisec = PointsPerPkg * PkgsPerMillisec;
+
+        /// <summary>帧时间字段（毫秒），非重复扫描下帧时间越长扫描细节越丰富</summary>
+        private int _frameTime = 100;
+
+        /// <summary>每帧的包数</summary>
+        private int _pkgsPerFrame = PointsPerMillisec * 100;
+
+        /// <summary>每帧的点数</summary>
+        private int _ptsPerFrame = PointsPerMillisec * 100;
+
+        /// <summary>最新一次接收到点云数据的时间</summary>
+        private DateTime _lastReceivedTime = DateTime.MinValue;
+
+        /// <summary>最新一次点云数据接收后处理完成的时间</summary>
+        private DateTime _lastMergedTime = DateTime.MinValue;
+
+        /// <summary>最新一个点云数据包的包头信息（格式化字符串，调试用）</summary>
+        private string _packetHeader = string.Empty;
+
+        /// <summary>最新一个点云数据包的前280字节数据（16进制字符串，调试用）</summary>
+        private string _packetData = string.Empty;
+
+        /// <summary>最新一个点云数据包的数据类型</summary>
+        private PointCloudDataType _dataType;
+
+        /// <summary>笛卡尔坐标系点云缓存队列（线程安全）</summary>
+        private readonly ConcurrentQueue<CartesianDataPoint> _cartesianRawPointsQueue = 
+#if NET45_OR_GREATER
+            new ConcurrentQueue<CartesianDataPoint>();
+#elif NET9_0_OR_GREATER
+            new();
 #endif
+
+        /// <summary>点云处理锁（保护 List 缓冲区的线程安全）</summary>
+#if NET9_0_OR_GREATER
+        private readonly Lock _pointCloudLock = new();
+#elif NET45_OR_GREATER
+        private readonly object _pointCloudLock = new object();
+#endif
+
+        /// <summary>笛卡尔坐标系点云List缓冲区（当不使用双缓冲时）</summary>
+#if NET45_OR_GREATER
+        private readonly List<CartesianDataPoint> _cartesianRawPoints = new List<CartesianDataPoint>();
+#elif NET9_0_OR_GREATER
+        private readonly List<CartesianDataPoint> _cartesianRawPoints = [];
+#endif
+
+        #endregion
 
         #endregion
 
@@ -277,9 +339,105 @@ namespace LivoxHapController.Services
                 return _player;
             }
         }
+
+        #region 点云处理属性
+
+        /// <summary>
+        /// 点云处理开关（默认关闭）
+        /// 开启后，收到点云数据时内部自动执行：解析数据包 → 坐标变换 → 写入缓冲区
+        /// 关闭时仅触发 PointCloudDataReceived 事件，不做内部处理，节省资源
+        /// </summary>
+        public bool EnablePointCloudProcessing
+        {
+            get { return _enablePointCloudProcessing; }
+            set
+            {
+                _enablePointCloudProcessing = value;
+                // 开启时自动启动缓存监控，关闭时停止监控
+                if (value)
+                    StartCacheMonitor();
+                else
+                    StopCacheMonitor();
         }
         }
+
+        /// <summary>
+        /// 最新一次接收到点云数据的时间
+        /// 假如慢于当前时间2秒，则认为未接收
+        /// </summary>
+        public DateTime LastReceivedTime { get { return _lastReceivedTime; } }
+
+        /// <summary>
+        /// 最新一次点云数据接收后处理完成的时间
+        /// </summary>
+        public DateTime LastMergedTime { get { return _lastMergedTime; } }
+
+        /// <summary>
+        /// 当前是否正在接收点云数据
+        /// true：正在接收点云数据；false：未接收到点云数据
+        /// </summary>
+        public bool CurrentlyReceiving
+        {
+            get { return (DateTime.Now - _lastReceivedTime).TotalSeconds < 2; }
         }
+
+        /// <summary>
+        /// 最新一个点云数据包的包头信息（格式化字符串，调试用）
+        /// </summary>
+        public string PacketHeader { get { return _packetHeader; } }
+
+        /// <summary>
+        /// 最新一个点云数据包的前280字节数据（16进制字符串，调试用）
+        /// </summary>
+        public string PacketData { get { return _packetData; } }
+
+        /// <summary>
+        /// 最新一个点云数据包的数据类型
+        /// </summary>
+        public PointCloudDataType DataType { get { return _dataType; } }
+
+        /// <summary>
+        /// 帧速率（毫秒）
+        /// 因为HAP雷达使用非重复扫描，因此帧速率时间越长，扫描图像细节越丰富
+        /// </summary>
+        public int FrameTime
+        {
+            get { return _frameTime; }
+            set
+            {
+                if (value < 0) return;
+                _frameTime = value;
+                PkgsPerFrame = PkgsPerMillisec * _frameTime;
+            }
+        }
+
+        /// <summary>
+        /// 每帧的包数
+        /// HAP雷达使用非重复扫描，因此包数越多，扫描细节越丰富
+        /// 每包含96个点，HAP雷达点发送速率为452KHZ，因此当帧速率为1ms时，每帧包数为452K/1K/96=4
+        /// </summary>
+        public int PkgsPerFrame
+        {
+            get { return _pkgsPerFrame; }
+            private set
+            {
+                _pkgsPerFrame = value;
+                PointsPerFrame = PointsPerPkg * _pkgsPerFrame;
+            }
+        }
+
+        /// <summary>
+        /// 每帧的点数
+        /// 每包含96个点，因此每帧点数 = 96 * 每帧包数
+        /// </summary>
+        public int PointsPerFrame
+        {
+            get { return _ptsPerFrame; }
+            private set { _ptsPerFrame = value; }
+        }
+
+        #endregion
+
         #endregion
 
         #region 构造与析构
@@ -388,8 +546,13 @@ namespace LivoxHapController.Services
             Config = config;
 
             // 保存坐标变换参数
-            if (coordTransParamSet != null)
-                CoordTransParamSet = coordTransParamSet;
+            //if (coordTransParamSet != null)
+            //    CoordTransParamSet = coordTransParamSet;
+            CoordTransParamSet = coordTransParamSet ?? new CoordTransParamSet();
+
+            // 从配置中读取帧时间（HostNetInfo.FrameTime）
+            if (config?.HapConfig?.HostNetInfo?.Count > 0)
+                FrameTime = config.HapConfig.HostNetInfo[0].FrameTime;
 
             // 初始化UDP通信处理器
             _udpComm = new UdpCommunicator();
@@ -885,6 +1048,8 @@ namespace LivoxHapController.Services
 
         /// <summary>
         /// 处理点云数据接收
+        /// 无论是否开启点云处理，都会触发外部 PointCloudDataReceived 事件
+        /// 当 EnablePointCloudProcessing 为 true 时，额外执行内部处理（解析→变换→缓冲）
         /// </summary>
         private void OnPointCloudDataReceived(object
             //.net 9框架下使返回对象可为空
@@ -894,6 +1059,13 @@ namespace LivoxHapController.Services
             sender, byte[] data)
         {
             PointCloudDataReceived?.Invoke(this, data);
+
+            // 若开启点云处理，执行内部处理流水线
+            if (_enablePointCloudProcessing && data != null)
+            {
+                // 使用 Task.Run 在线程池中异步执行处理，避免阻塞UDP接收线程
+                _ = Task.Run(() => MergePointCloudData(data));
+            }
         }
 
         /// <summary>
@@ -907,6 +1079,145 @@ namespace LivoxHapController.Services
             sender, byte[] data)
         {
             ImuDataReceived?.Invoke(this, data);
+        }
+
+        #endregion
+
+        #region 点云数据处理
+
+        /// <summary>
+        /// 合并点云数据（解析、坐标变换、写入缓冲区）
+        /// 从 LivoxHapQuickStart.Merge() 迁移而来，集成到基础库内部
+        /// 此方法在 Task.Run 中异步调用，不会阻塞UDP接收线程
+        /// </summary>
+        /// <param name="rawData">点云原始字节数据</param>
+        private void MergePointCloudData(byte[] rawData)
+        {
+            // 解析点云数据包
+            var packet = PointCloudParser.ParsePacket(rawData);
+            if (packet == null) return;
+
+            // 更新接收时间
+            _lastReceivedTime = DateTime.Now;
+
+            // 提取前280字节的16进制数据（调试用）
+            int datalen = Math.Min(280, rawData.Length);
+            _packetData = rawData.Take(datalen)
+                .Aggregate("", (current, b) => current + b.ToString("X2") + " ").Trim();
+
+            // 记录数据类型
+            _dataType = packet.Header.DataType;
+
+            // 按数据类型分支处理
+            switch (_dataType)
+            {
+                case PointCloudDataType.Cartesian16Bit:
+                case PointCloudDataType.Cartesian32Bit:
+                    var points = packet.CartesianDataPoints.ToArray();
+
+                    // 如果坐标转换参数集不为null，则在写入缓冲区前先进行坐标转换
+                    if (CoordTransParamSet != null)
+                        points = points.TransformPoints(CoordTransParamSet);
+
+                    // 写入线程安全的并发队列
+                    foreach (var point in points)
+                    {
+                        _cartesianRawPointsQueue.Enqueue(point);
+                    }
+                    break;
+
+                case PointCloudDataType.ImuData:
+                    // IMU数据暂不做内部处理，仍通过外部 ImuDataReceived 事件获取
+                    break;
+            }
+
+            // 更新合并完成时间
+            _lastMergedTime = DateTime.Now;
+
+            // 格式化包头信息（调试用）
+            _packetHeader = string.Format(
+                "time_rcvd: {0:yyyy-MM-dd HH:mm:ss.ffffff}, time_merged: {1:yyyy-MM-dd HH:mm:ss.ffffff}, " +
+                "Point cloud timestamp: {2}, udp_counter: {3}, data_num: {4}, data_type: {5}, length: {6}, frame_counter: {7}",
+                _lastReceivedTime, _lastMergedTime,
+                packet.Header.TimestampNanoSec, packet.Header.UdpCnt, packet.Header.DotNum,
+                packet.Header.DataType, packet.Header.Length, packet.Header.FrameCnt);
+        }
+
+        /// <summary>
+        /// 获取当前帧的笛卡尔坐标点云数据快照（线程安全、非破坏性）
+        /// 从并发队列中复制所有点并裁剪到帧容量大小，不修改队列内容
+        /// 队列的裁剪仍由后台 MonitorAndTrimCacheAsync 负责
+        /// </summary>
+        /// <returns>笛卡尔坐标点数组</returns>
+        public CartesianDataPoint[] GetCurrentFrameOfRawPoints()
+        {
+            // 非破坏性快照：复制队列中所有点到数组，不清空队列
+            var allPoints = _cartesianRawPointsQueue.ToArray();
+
+            // 按帧大小裁剪（保留最新的 PointsPerFrame 个点）
+            // 队列尾部是最新数据（Enqueue追加到尾部，Monitor从头部删除旧数据）
+            if (allPoints.Length > _ptsPerFrame)
+            {
+                var result = new CartesianDataPoint[_ptsPerFrame];
+                Array.Copy(allPoints, allPoints.Length - _ptsPerFrame, result, 0, _ptsPerFrame);
+                return result;
+            }
+
+            return allPoints;
+        }
+
+        /// <summary>
+        /// 启动缓存监控任务
+        /// 定期检查缓存大小，超出帧容量时裁剪旧数据
+        /// </summary>
+        private void StartCacheMonitor()
+        {
+            if (_monitorCts != null) return; // 已在运行
+
+            _monitorCts = new CancellationTokenSource();
+            _ = MonitorAndTrimCacheAsync(_monitorCts.Token);
+        }
+
+        /// <summary>
+        /// 停止缓存监控任务
+        /// </summary>
+        private void StopCacheMonitor()
+        {
+            _monitorCts?.Cancel();
+            _monitorCts?.Dispose();
+            _monitorCts = null;
+        }
+
+        /// <summary>
+        /// 异步监控缓存队列大小并定期裁剪
+        /// 每毫秒检测一次，当队列中的点数超过 PointsPerFrame 时裁剪旧数据
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>异步任务</returns>
+        private async Task MonitorAndTrimCacheAsync(CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(1, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
+                // 裁剪并发队列：当点数超过帧容量时，丢弃旧数据
+                int count = _cartesianRawPointsQueue.Count;
+                if (count > _ptsPerFrame)
+                {
+                    int excess = count - _ptsPerFrame;
+                    for (int i = 0; i < excess; i++)
+                    {
+                        _cartesianRawPointsQueue.TryDequeue(out _);
+                    }
+                }
+            }
         }
 
         #endregion
@@ -937,6 +1248,12 @@ namespace LivoxHapController.Services
 
                 // 停止设备发现
                 _discovery?.Dispose();
+
+                // 停止缓存监控
+                StopCacheMonitor();
+
+                // 清空点云缓冲区
+                while (_cartesianRawPointsQueue.TryDequeue(out _)) { }
 
                 // 停止录制和播放
                 _recorder?.Dispose();
