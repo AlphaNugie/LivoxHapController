@@ -43,11 +43,13 @@ namespace LivoxHapController.Services
         private BinaryWriter? _writer;
         private Timer? _pauseBindingTimer;
         private Timer? _limitCheckTimer;
+        private Timer? _delayStopTimer;
 #elif NET45_OR_GREATER
         private FileStream _fileStream;
         private BinaryWriter _writer;
         private Timer _pauseBindingTimer;
         private Timer _limitCheckTimer;
+        private Timer _delayStopTimer;
 #endif
 
         /// <summary>同步锁</summary>
@@ -62,6 +64,9 @@ namespace LivoxHapController.Services
 
         /// <summary>是否已暂停</summary>
         private volatile bool _isPaused;
+
+        /// <summary>是否处于滚动缓冲模式（数据在内存中，尚未落盘）</summary>
+        private volatile bool _isBuffering;
 
         /// <summary>是否已释放</summary>
         private volatile bool _disposed;
@@ -88,6 +93,16 @@ namespace LivoxHapController.Services
 #endif
             _pauseBinding;
 
+        /// <summary>滚动缓冲帧队列（存储时间戳+原始数据），仅在缓冲模式使用</summary>
+#if NET9_0_OR_GREATER
+        private Queue<(DateTime Timestamp, byte[] Data)>? _bufferFrames;
+#elif NET45_OR_GREATER
+        private Queue<Tuple<DateTime, byte[]>> _bufferFrames;
+#endif
+
+        /// <summary>滚动缓冲时长（秒），用于裁剪过期帧</summary>
+        private double _bufferSeconds;
+
         #endregion
 
         #region 属性
@@ -97,6 +112,9 @@ namespace LivoxHapController.Services
 
         /// <summary>是否已暂停</summary>
         public bool IsPaused { get { return _isPaused; } }
+
+        /// <summary>是否处于滚动缓冲模式（数据在内存中，尚未落盘）</summary>
+        public bool IsBuffering { get { return _isBuffering; } }
 
         /// <summary>当前录制段开始时间</summary>
         public DateTime SegmentStartTime { get { return _segmentStartTime; } }
@@ -145,6 +163,13 @@ namespace LivoxHapController.Services
 #endif
             RecordingStopped;
 
+        /// <summary>StopWithDelay 延时到期自动停止时触发</summary>
+        public event EventHandler
+#if NET9_0_OR_GREATER
+            ?
+#endif
+            DelayedStopTriggered;
+
         #endregion
 
         #region 录制控制
@@ -153,7 +178,7 @@ namespace LivoxHapController.Services
         /// 开始录制
         /// </summary>
         /// <param name="filePath">输出文件路径（建议后缀 .pcr）</param>
-        /// <exception cref="InvalidOperationException">已在录制中</exception>
+        /// <exception cref="InvalidOperationException">已在录制中或处于缓冲模式</exception>
         /// <exception cref="ArgumentNullException">filePath 为空</exception>
         public void Start(string filePath)
         {
@@ -161,6 +186,8 @@ namespace LivoxHapController.Services
                 throw new ArgumentNullException(nameof(filePath));
             if (_isRecording)
                 throw new InvalidOperationException("已在录制中，请先调用 Stop()");
+            if (_isBuffering)
+                throw new InvalidOperationException("当前处于滚动缓冲模式，请先调用 FlushBuffer() 或 Stop()");
 
             var dir = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
@@ -190,15 +217,23 @@ namespace LivoxHapController.Services
         }
 
         /// <summary>
-        /// 停止录制
+        /// 停止录制（同时清理滚动缓冲区和延时停止定时器）
         /// </summary>
         public void Stop()
         {
             lock (_syncRoot)
             {
-                if (!_isRecording) return;
+                if (!_isRecording && !_isBuffering) return;
+
+                // 取消延时停止定时器
+                _delayStopTimer?.Dispose();
+                _delayStopTimer = null;
+
+                // 清空滚动缓冲区
+                _bufferFrames?.Clear();
 
                 _isRecording = false;
+                _isBuffering = false;
 
                 // 停止定时器
                 _limitCheckTimer?.Dispose();
@@ -247,13 +282,35 @@ namespace LivoxHapController.Services
 
         /// <summary>
         /// 记录一个点云数据包
-        /// 暂停状态或未录制时忽略
+        /// 缓冲模式：入队到滚动缓冲区（不写盘）；录制模式：直接写入文件；否则忽略
         /// </summary>
         /// <param name="rawData">原始 UDP 点云数据</param>
         public void Record(byte[] rawData)
         {
-            if (!_isRecording || _isPaused || rawData == null || rawData.Length == 0)
+            // 无效数据直接丢弃
+            if (rawData == null || rawData.Length == 0)
                 return;
+
+            // 缓冲模式：入队到内存滚动缓冲区
+            if (_isBuffering)
+            {
+                lock (_syncRoot)
+                {
+                    if (!_isBuffering || _bufferFrames == null) return;
+
+#if NET9_0_OR_GREATER
+                    _bufferFrames.Enqueue((DateTime.UtcNow, rawData));
+#elif NET45_OR_GREATER
+                    _bufferFrames.Enqueue(Tuple.Create(DateTime.UtcNow, rawData));
+#endif
+                    // 裁剪过期帧（时间戳早于 bufferSeconds 秒前的帧出队丢弃）
+                    TrimExpiredFrames();
+                }
+                return;
+            }
+
+            // 正常录制模式：暂停状态或未录制时忽略
+            if (!_isRecording || _isPaused) return;
 
             lock (_syncRoot)
             {
@@ -276,6 +333,173 @@ namespace LivoxHapController.Services
                 {
                     // 文件流已关闭，忽略
                 }
+            }
+        }
+
+        #endregion
+
+        #region 滚动缓冲与延时录制
+
+        /// <summary>
+        /// 启动滚动缓冲模式
+        /// 数据持续写入内存缓冲区（不落盘），仅保留最近 bufferSeconds 秒的数据
+        /// 调用后 IsBuffering 返回 true，IsRecording 返回 false（尚未落盘）
+        /// </summary>
+        /// <param name="bufferSeconds">缓冲时长（秒），典型值 5.0</param>
+        /// <exception cref="InvalidOperationException">已在录制中或已在缓冲模式</exception>
+        /// <exception cref="ArgumentException">bufferSeconds 小于等于 0</exception>
+        public void StartBufferedRecording(double bufferSeconds)
+        {
+            if (bufferSeconds <= 0)
+                throw new ArgumentException("缓冲时长必须大于0", nameof(bufferSeconds));
+            if (_isRecording)
+                throw new InvalidOperationException("已在录制中，请先调用 Stop()");
+            if (_isBuffering)
+                throw new InvalidOperationException("已处于滚动缓冲模式");
+
+            _bufferSeconds = bufferSeconds;
+#if NET9_0_OR_GREATER
+            _bufferFrames = new Queue<(DateTime, byte[])>();
+#elif NET45_OR_GREATER
+            _bufferFrames = new Queue<Tuple<DateTime, byte[]>>();
+#endif
+            _isBuffering = true;
+        }
+
+        /// <summary>
+        /// 将缓冲区中所有帧写入指定文件并切换为正常录制模式
+        /// 缓冲区内帧按时间戳升序依次写入，之后新到达的帧直接追加到文件
+        /// </summary>
+        /// <param name="filePath">输出 .pcr 文件路径</param>
+        /// <exception cref="InvalidOperationException">当前不在缓冲模式</exception>
+        /// <exception cref="ArgumentNullException">filePath 为空</exception>
+        public void FlushBuffer(string filePath)
+        {
+            if (!_isBuffering)
+                throw new InvalidOperationException("当前不在滚动缓冲模式，请先调用 StartBufferedRecording()");
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentNullException(nameof(filePath));
+
+            lock (_syncRoot)
+            {
+                if (!_isBuffering || _bufferFrames == null) return;
+
+                // 创建输出目录
+                var dir = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                // 打开文件流
+                _fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read);
+                _writer = new BinaryWriter(_fileStream);
+                FilePath = filePath;
+                _totalPackets = 0;
+                _isPaused = false;
+
+                // 创建并启动录制时长计时器
+                _activeRecordingStopwatch = new Stopwatch();
+                _activeRecordingStopwatch.Start();
+
+                // 写入段开始标识
+                WriteSegmentHeader();
+
+                // 将缓冲区中所有帧按时间戳升序写入文件
+                while (_bufferFrames.Count > 0)
+                {
+#if NET9_0_OR_GREATER
+                    var (_, data) = _bufferFrames.Dequeue();
+#elif NET45_OR_GREATER
+                    var frame = _bufferFrames.Dequeue();
+                    var data = frame.Item2;
+#endif
+                    if (data != null && data.Length > 0)
+                    {
+                        _writer.Write(SegmentFlagData);
+                        _writer.Write(0L);
+                        _writer.Write(data.Length);
+                        _writer.Write(data);
+                        _totalPackets++;
+                    }
+                }
+
+                // 切换为正常录制模式
+                _isBuffering = false;
+                _isRecording = true;
+
+                // 启动时间限制检查
+                if (MaxDuration != null || Deadline != null)
+                    _limitCheckTimer = new Timer(OnLimitCheck, null, 100, 100);
+
+                // 如果有暂停绑定，启动轮询
+                if (_pauseBinding != null)
+                    _pauseBindingTimer = new Timer(OnPauseBindingCheck, null, 100, 100);
+            }
+        }
+
+        /// <summary>
+        /// 延时停止录制
+        /// 继续录制 delaySeconds 秒后自动调用 Stop()
+        /// 延时期间 MaxDuration 和 Deadline 仍然生效（取最早触发者）
+        /// </summary>
+        /// <param name="delaySeconds">延时秒数，典型值 5.0</param>
+        /// <exception cref="InvalidOperationException">当前不在录制模式</exception>
+        /// <exception cref="ArgumentException">delaySeconds 小于等于 0</exception>
+        public void StopWithDelay(double delaySeconds)
+        {
+            if (!_isRecording)
+                throw new InvalidOperationException("当前不在录制模式，无法延时停止");
+            if (delaySeconds <= 0)
+                throw new ArgumentException("延时时长必须大于0", nameof(delaySeconds));
+
+            // 取消已有的延时定时器（如果重复调用 StopWithDelay）
+            _delayStopTimer?.Dispose();
+            _delayStopTimer = null;
+
+            // 如果 MaxDuration 和 Deadline 都会在延时之前到期，则不需要额外定时器
+            // OnLimitCheck 已在 100ms 周期轮询中处理，会在更早的时间点触发 Stop()
+            // 这里仍需启动延时定时器，作为兜底保障
+
+            int delayMs = (int)(delaySeconds * 1000);
+            _delayStopTimer = new Timer(OnDelayStopCallback, null, delayMs, Timeout.Infinite);
+        }
+
+        /// <summary>
+        /// 延时停止定时器回调
+        /// </summary>
+        private void OnDelayStopCallback(object
+#if NET9_0_OR_GREATER
+            ?
+#endif
+            state)
+        {
+            if (!_isRecording) return;
+
+            // 先触发事件，再停止（确保上层能在停止前收到通知）
+            DelayedStopTriggered?.Invoke(this, EventArgs.Empty);
+            Stop();
+        }
+
+        /// <summary>
+        /// 裁剪滚动缓冲区中的过期帧
+        /// 将时间戳早于 DateTime.UtcNow - bufferSeconds 的帧出队丢弃
+        /// 需在持有 _syncRoot 锁的情况下调用
+        /// </summary>
+        private void TrimExpiredFrames()
+        {
+            if (_bufferFrames == null || _bufferFrames.Count == 0) return;
+
+            var cutoff = DateTime.UtcNow - TimeSpan.FromSeconds(_bufferSeconds);
+            while (_bufferFrames.Count > 0)
+            {
+#if NET9_0_OR_GREATER
+                var (timestamp, _) = _bufferFrames.Peek();
+#elif NET45_OR_GREATER
+                var timestamp = _bufferFrames.Peek().Item1;
+#endif
+                if (timestamp < cutoff)
+                    _bufferFrames.Dequeue();
+                else
+                    break;
             }
         }
 
@@ -443,7 +667,7 @@ namespace LivoxHapController.Services
         #region 资源释放
 
         /// <summary>
-        /// 释放资源
+        /// 释放资源（清理录制、缓冲、定时器等所有资源）
         /// </summary>
         public void Dispose()
         {
@@ -452,6 +676,14 @@ namespace LivoxHapController.Services
 
             Stop();
             UnbindPause();
+
+            // 清理延时停止定时器
+            _delayStopTimer?.Dispose();
+            _delayStopTimer = null;
+
+            // 清空滚动缓冲区
+            _bufferFrames?.Clear();
+            _bufferFrames = null;
 
             // 添加此行以防止执行终结器
             GC.SuppressFinalize(this);

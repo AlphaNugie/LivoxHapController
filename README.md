@@ -308,7 +308,7 @@ CartesianDataPoint.ToXyz(points, @"D:\output.xyz");
 
 #### 点云数据录制与模拟播放
 
-`PointCloudRecorder` 和 `PointCloudPlayer`（`Services/`）提供扫描仪原始数据的录制与离线回放能力。录制器将 UDP 原始数据包按接收顺序逐包写入 `.pcr` 二进制文件；播放器从文件读取并按 4包/ms 速率注入，数据流经与网络接收完全一致的 `InjectPointCloudData → PointCloudDataReceived → MergePointCloudData` 路径。
+`PointCloudRecorder` 和 `PointCloudPlayer`（`Services/`）提供扫描仪原始数据的录制与离线回放能力。录制器将 UDP 原始数据包按接收顺序逐包写入 `.pcr` 二进制文件，支持**滚动缓冲模式**（报警时记录）、延时停止等高级功能；播放器从文件读取并按 4包/ms 速率注入，数据流经与网络接收完全一致的 `InjectPointCloudData → PointCloudDataReceived → MergePointCloudData` 路径。
 
 **录制文件格式 (.pcr)：** 每包 `SegmentFlag(4B) + TimestampTicks(8B) + DataLength(4B) + RawData(N B)`，暂停恢复时写入新段标识（`0xFFFFFFFF`）+ 时间戳。
 
@@ -337,6 +337,20 @@ radar.Recorder.BindPauseToProperty(viewModel, vm => vm.Status == StatusEnum.Paus
 
 // 停止录制
 radar.StopRecording();
+
+// === 滚动缓冲录制（报警场景） ===
+// 启动滚动缓冲：数据暂存内存，不落盘
+radar.StartBufferedRecording(5.0);              // 保留最近5秒数据
+
+// 报警触发时：将缓冲区写入文件，切换为正常录制
+radar.FlushBuffer("录制_报警_2026-07-07.pcr");
+
+// 报警解除时：延时5秒后自动停止录制
+radar.StopWithDelay(5.0);
+
+// 订阅延时停止事件（可选）
+radar.Recorder.DelayedStopTriggered += (s, e) =>
+    Console.WriteLine("延时录制已自动停止");
 ```
 
 > 录制器默认为 `null`，不录制时零开销。`OnPointCloudDataReceived` 中 `_recorder?.Record(data)` 在未创建录制器时为空操作。

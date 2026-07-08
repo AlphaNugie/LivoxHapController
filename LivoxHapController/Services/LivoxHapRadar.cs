@@ -1385,6 +1385,36 @@ namespace LivoxHapController.Services
         }
 
         /// <summary>
+        /// 启动滚动缓冲录制模式（数据暂存内存，不落盘）
+        /// 便捷入口，等价于 Recorder.StartBufferedRecording(bufferSeconds)
+        /// </summary>
+        /// <param name="bufferSeconds">缓冲时长（秒），典型值 5.0</param>
+        public void StartBufferedRecording(double bufferSeconds)
+        {
+            Recorder.StartBufferedRecording(bufferSeconds);
+        }
+
+        /// <summary>
+        /// 将滚动缓冲区中的帧写入文件并切换为正常录制模式
+        /// 便捷入口，等价于 Recorder.FlushBuffer(filePath)
+        /// </summary>
+        /// <param name="filePath">输出 .pcr 文件路径</param>
+        public void FlushBuffer(string filePath)
+        {
+            Recorder.FlushBuffer(filePath);
+        }
+
+        /// <summary>
+        /// 延时停止录制（继续录制指定秒数后自动停止）
+        /// 便捷入口，等价于 Recorder.StopWithDelay(delaySeconds)
+        /// </summary>
+        /// <param name="delaySeconds">延时秒数，典型值 5.0</param>
+        public void StopWithDelay(double delaySeconds)
+        {
+            Recorder.StopWithDelay(delaySeconds);
+        }
+
+        /// <summary>
         /// 开始模拟播放 .pcr 录制文件（可指定是否循环播放，默认不循环）
         /// 数据通过 UdpCommunicator.InjectPointCloudData 注入，走与网络接收完全一致的流程
         /// </summary>
