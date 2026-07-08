@@ -329,8 +329,11 @@ radar.Recorder.Deadline = DateTime.Now.AddHours(1);     // 截止时间
 radar.Recorder.Pause();
 radar.Recorder.Resume();
 
-// 绑定暂停动作到外部 bool 属性（如 ViewModel.ShouldPause）
-radar.Recorder.BindPauseToProperty(viewModel, vm => vm.ShouldPause);
+// 绑定暂停动作到外部任意返回 bool 的表达式（支持属性/字段/方法/复杂表达式，编译后零反射开销）
+radar.Recorder.BindPauseToProperty(viewModel, vm => vm.ShouldPause);       // 属性
+radar.Recorder.BindPauseToProperty(viewModel, vm => vm._isPaused);         // 字段
+radar.Recorder.BindPauseToProperty(viewModel, vm => vm.ShouldPause());     // 方法
+radar.Recorder.BindPauseToProperty(viewModel, vm => vm.Status == StatusEnum.Paused); // 复杂表达式
 
 // 停止录制
 radar.StopRecording();

@@ -104,16 +104,8 @@ namespace LivoxHapController.Services
         /// <summary>累计录制包数</summary>
         public int TotalRecordedPackets { get { return _totalPackets; } }
 
-        /// <summary>已录制总时长（排除暂停时间，录制中返回实时值）</summary>
-        public TimeSpan Elapsed
-        {
-            get
-            {
-                if (_activeRecordingStopwatch != null && _activeRecordingStopwatch.IsRunning)
-                    return _activeRecordingStopwatch.Elapsed;
-                return _activeRecordingStopwatch != null ? _activeRecordingStopwatch.Elapsed : TimeSpan.Zero;
-            }
-        }
+        /// <summary>已录制总时长（排除暂停时间）；Stopwatch 暂停后 Elapsed 自动冻结，无需额外判断 IsRunning</summary>
+        public TimeSpan Elapsed => _activeRecordingStopwatch?.Elapsed ?? TimeSpan.Zero;
 
         /// <summary>最大持续时长（超限自动停止），null=不限制</summary>
         public TimeSpan? MaxDuration { get; set; }
@@ -292,14 +284,17 @@ namespace LivoxHapController.Services
         #region 暂停绑定
 
         /// <summary>
-        /// 将暂停动作绑定到指定对象的 bool 属性
-        /// 属性变为 true → Pause()；变为 false → Resume()
-        /// 支持多个绑定（后续绑定覆盖前一个）
-        /// <para/> BindPauseToProperty(viewModel, vm => vm.ShouldPause);
+        /// 将暂停动作绑定到指定对象的任意返回 bool 的表达式
+        /// 表达式返回 true → Pause()；返回 false → Resume()
+        /// 支持属性、字段、方法调用、复杂表达式等任意返回 bool 的 Lambda
+        /// 后续绑定覆盖前一个绑定
+        /// <para/> 示例：BindPauseToProperty(viewModel, vm => vm.ShouldPause);
+        /// <para/> 示例：BindPauseToProperty(viewModel, vm => vm._isPaused);
+        /// <para/> 示例：BindPauseToProperty(viewModel, vm => vm.Status == StatusEnum.Paused);
         /// </summary>
         /// <typeparam name="T">目标对象类型</typeparam>
         /// <param name="target">目标对象实例</param>
-        /// <param name="propertySelector">bool 属性选择器 <para/>BindPauseToProperty(viewModel, vm => vm.ShouldPause);</param>
+        /// <param name="propertySelector">返回 bool 的表达式选择器，编译后直接调用，零反射开销</param>
         /// <exception cref="ArgumentNullException">target 或 propertySelector 为 null</exception>
         public void BindPauseToProperty<T>(T target, Expression<Func<T, bool>> propertySelector) where T : class
         {
@@ -313,21 +308,20 @@ namespace LivoxHapController.Services
             ArgumentNullException.ThrowIfNull(propertySelector);
 #endif
 
-            // 解析属性名
-#if NET45_OR_GREATER
-            if (!(propertySelector.Body is MemberExpression memberExpr))
-#elif NET9_0_OR_GREATER
-            if (propertySelector.Body is not MemberExpression memberExpr)
-#endif
-                throw new ArgumentException("表达式必须是属性选择器，如 vm => vm.IsPaused");
-
-            string propertyName = memberExpr.Member.Name;
+            // 编译表达式为委托，轮询时直接调用，无需反射
+            Func<T, bool> compiledFunc = propertySelector.Compile();
 
             _pauseBinding = new PauseBinding
             {
                 Target = target,
-                PropertyName = propertyName,
-                //LastValue = GetPropertyValue(target, propertyName)
+                // 闭包捕获 target，返回 bool 值（null 也转为 false，确保 LastValue 比较稳定）
+                ValueGetter = () =>
+                {
+                    try { return compiledFunc(target); }
+                    catch { return false; }
+                },
+                // 重要：初始值设为 null，首次检测时同步当前值，避免 LastValue=false/true 导致的误触发/不触发
+                LastValue = null
             };
 
             // 如果已在录制，启动轮询
@@ -349,6 +343,7 @@ namespace LivoxHapController.Services
 
         /// <summary>
         /// 暂停绑定轮询回调（100ms）
+        /// 直接调用编译后的 ValueGetter 委托取值，无需反射
         /// </summary>
         private void OnPauseBindingCheck(object
             //.net 9框架下使返回对象可为空
@@ -357,26 +352,24 @@ namespace LivoxHapController.Services
 #endif
             state)
         {
-            if (_pauseBinding == null || !_isRecording) return;
+            if (_pauseBinding == null || _pauseBinding.ValueGetter == null || !_isRecording) return;
 
             try
             {
-                bool? currentValue = GetPropertyValue(_pauseBinding.Target, _pauseBinding.PropertyName);
-                // 如果属性值为 null（适用于 bool? 类型），则不进行状态切换
-                if (!currentValue.HasValue)
-                    return;
+                // 直接调用编译后的委托获取当前 bool 值（支持属性/字段/方法/表达式，零反射开销）
+                bool currentValue = _pauseBinding.ValueGetter();
 
-                //// 首次检测时同步初始值，避免 LastValue=null 导致的误触发
-                //if (!_pauseBinding.LastValue.HasValue)
-                //{
-                //    _pauseBinding.LastValue = currentValue;
-                //    return;
-                //}
-
-                if (currentValue != _pauseBinding.LastValue)
+                // 首次检测时同步初始值，避免 LastValue=null 导致的误触发
+                if (!_pauseBinding.LastValue.HasValue)
                 {
                     _pauseBinding.LastValue = currentValue;
-                    if (currentValue.Value)
+                    return;
+                }
+
+                if (currentValue != _pauseBinding.LastValue.Value)
+                {
+                    _pauseBinding.LastValue = currentValue;
+                    if (currentValue)
                         Pause();
                     else
                         Resume();
@@ -387,38 +380,6 @@ namespace LivoxHapController.Services
                 // 目标对象可能已释放，忽略异常
             }
         }
-
-        /// <summary>
-        /// 通过反射获取对象属性值
-        /// 当获取到的属性值不是 bool 或 bool? 类型时抛出异常
-        /// <para/> 假如获取到的属性值为null，则返回 null（适用于 bool? 类型的属性）
-        /// </summary>
-#if NET45_OR_GREATER
-        private static bool? GetPropertyValue(object target, string propertyName)
-#elif NET9_0_OR_GREATER
-        private static bool? GetPropertyValue(object? target, string? propertyName)
-#endif
-        {
-            if (target == null)
-                throw new ArgumentNullException(nameof(target), "目标对象不能为空");
-
-            if (propertyName == null)
-                throw new ArgumentNullException(nameof(propertyName), "属性名称不能为空");
-
-            var prop = target.GetType().GetProperty(propertyName);
-            if (prop == null || (prop.PropertyType != typeof(bool) && prop.PropertyType != typeof(bool?)))
-                throw new ArgumentException(string.Format("属性 {0} 不存在或不是 bool 类型", propertyName));
-
-            return (bool?)prop.GetValue(target);
-        }
-        //private static bool GetPropertyValue(object target, string propertyName)
-        //{
-        //    var prop = target.GetType().GetProperty(propertyName);
-        //    if (prop == null || prop.PropertyType != typeof(bool))
-        //        throw new ArgumentException(string.Format("属性 {0} 不存在或不是 bool 类型", propertyName));
-
-        //    return (bool)prop.GetValue(target);
-        //}
 
         #endregion
 
@@ -502,6 +463,7 @@ namespace LivoxHapController.Services
 
         /// <summary>
         /// 暂停绑定信息
+        /// 使用编译后的委托代替反射，支持属性/字段/方法/任意 bool 表达式
         /// </summary>
         private class PauseBinding
         {
@@ -513,16 +475,14 @@ namespace LivoxHapController.Services
 #endif
  Target;
 
-            /// <summary>绑定的属性名</summary>
-            public string
-            //.net 9框架下使返回对象可为空
+            /// <summary>编译后的 bool 取值委托（闭包捕获 Target，直接调用无反射开销）</summary>
+            public Func<bool>
 #if NET9_0_OR_GREATER
             ?
 #endif
- PropertyName;
+            ValueGetter;
 
-            /// <summary>上次检测的属性值</summary>
-            //public bool LastValue;
+            /// <summary>上次检测的 bool 值（null=尚未检测）</summary>
             public bool? LastValue;
         }
 
